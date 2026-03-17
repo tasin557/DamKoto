@@ -8,7 +8,7 @@ export default function Landing() {
     setLoading(true)
     const appId = process.env.NEXT_PUBLIC_META_APP_ID
     const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`)
-    const scope = encodeURIComponent('pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement')
+    const scope = encodeURIComponent('pages_show_list,pages_messaging,pages_manage_metadata')
     const url = `https://www.facebook.com/v22.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`
     window.location.href = url
   }
