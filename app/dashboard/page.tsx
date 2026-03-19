@@ -539,40 +539,86 @@ function AutoReplyPage({ sellerId }: { sellerId: string }) {
   const [messengerReply, setMessengerReply] = useState(true);
   const [tone, setTone] = useState("formal");
   const [lang, setLang] = useState("bangla");
+  const [loading, setLoading] = useState(true);
+  const [saved, setSaved] = useState(false);
+
+  // Load settings from Supabase
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("seller_settings").select("*").eq("seller_id", sellerId).single();
+      if (data) {
+        setBotOn(data.bot_enabled ?? true);
+        setCommentReply(data.comment_reply ?? true);
+        setMessengerReply(data.messenger_reply ?? true);
+        setTone(data.reply_tone || "formal");
+        setLang(data.reply_language || "bangla");
+      }
+      setLoading(false);
+    })();
+  }, [sellerId]);
+
+  // Save settings to Supabase
+  async function saveSettings(updates: Record<string, any>) {
+    const { data: existing } = await supabase.from("seller_settings").select("id").eq("seller_id", sellerId).single();
+    if (existing) {
+      await supabase.from("seller_settings").update(updates).eq("seller_id", sellerId);
+    } else {
+      await supabase.from("seller_settings").insert({ seller_id: sellerId, ...updates });
+    }
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  function handleToggle(field: string, value: boolean, setter: (v: boolean) => void) {
+    setter(value);
+    saveSettings({ [field]: value });
+  }
+
+  function handleSelect(field: string, value: string, setter: (v: string) => void) {
+    setter(value);
+    saveSettings({ [field]: value });
+  }
+
+  if (loading) return <p style={{ textAlign: "center", color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>লোড হচ্ছে...</p>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 680 }}>
+      {saved && (
+        <div style={{ padding: "8px 16px", background: C.greenSoft, border: `1px solid ${C.greenText}`, borderRadius: 8, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.greenText, textAlign: "center" }}>
+          ✓ সেটিংস সেভ হয়েছে
+        </div>
+      )}
       <Card style={{ display: "flex", alignItems: "center", gap: 16 }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: C.surfaceBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🤖</div>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 600, color: C.deepInk }}>{botOn ? "বট চালু আছে" : "বট বন্ধ আছে"}</div>
           <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted }}>আজকে ৫০ টির মধ্যে ০টি ব্যবহৃত</div>
         </div>
-        <Toggle on={botOn} onChange={setBotOn} />
+        <Toggle on={botOn} onChange={v => handleToggle("bot_enabled", v, setBotOn)} />
       </Card>
       <Card>
         <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600, color: C.deepInk, marginBottom: 16 }}>AI আচরণ</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
           <div>
             <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, marginBottom: 6 }}>রিপ্লাই টোন</div>
-            <select value={tone} onChange={e => setTone(e.target.value)} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.cardBg, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>
+            <select value={tone} onChange={e => handleSelect("reply_tone", e.target.value, setTone)} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.cardBg, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>
               <option value="formal">ফর্মাল (আপনি)</option>
               <option value="casual">ক্যাজুয়াল (তুমি)</option>
             </select>
           </div>
           <div>
             <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, marginBottom: 6 }}>ভাষা</div>
-            <select value={lang} onChange={e => setLang(e.target.value)} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.cardBg, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>
+            <select value={lang} onChange={e => handleSelect("reply_language", e.target.value, setLang)} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.cardBg, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>
               <option value="bangla">বাংলা</option><option value="english">English</option><option value="mixed">Mixed</option>
             </select>
           </div>
         </div>
-        {[{ label: "কমেন্টে অটো-রিপ্লাই", desc: "Facebook Page পোস্টের কমেন্টে উত্তর", on: commentReply, set: setCommentReply },
-          { label: "মেসেঞ্জারে অটো-রিপ্লাই", desc: "ডাইরেক্ট মেসেজে উত্তর", on: messengerReply, set: setMessengerReply }
+        {[{ label: "কমেন্টে অটো-রিপ্লাই", desc: "Facebook Page পোস্টের কমেন্টে উত্তর", field: "comment_reply", on: commentReply, set: setCommentReply },
+          { label: "মেসেঞ্জারে অটো-রিপ্লাই", desc: "ডাইরেক্ট মেসেজে উত্তর", field: "messenger_reply", on: messengerReply, set: setMessengerReply }
         ].map((item, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderTop: i > 0 ? `1px solid ${C.border}` : "none" }}>
             <div style={{ flex: 1 }}><div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 600, color: C.deepInk }}>{item.label}</div><div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted }}>{item.desc}</div></div>
-            <Toggle on={item.on} onChange={item.set} />
+            <Toggle on={item.on} onChange={v => handleToggle(item.field, v, item.set)} />
           </div>
         ))}
       </Card>
