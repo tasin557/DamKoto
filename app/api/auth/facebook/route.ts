@@ -34,7 +34,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'No pages found' })
     }
 
-    // Save each page to Supabase
+    // Save each page to Supabase and collect IDs
+    const savedPages: { id: string; page_id: string; page_name: string }[] = []
+
     for (const page of pagesData.data) {
       const existing = await supabase
         .from('sellers')
@@ -43,20 +45,30 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (!existing.data) {
-        await supabase.from('sellers').insert({
+        const { data } = await supabase.from('sellers').insert({
           facebook_page_id: page.id,
           page_name: page.name,
           page_access_token: page.access_token
-        })
+        }).select('id').single()
+        if (data) savedPages.push({ id: data.id, page_id: page.id, page_name: page.name })
       } else {
         await supabase.from('sellers').update({
           page_access_token: page.access_token,
           page_name: page.name
         }).eq('facebook_page_id', page.id)
+        savedPages.push({ id: existing.data.id, page_id: page.id, page_name: page.name })
       }
     }
 
-    return NextResponse.json({ success: true })
+    // Return the first page's info so frontend can store it
+    const primaryPage = savedPages[0]
+
+    return NextResponse.json({
+      success: true,
+      seller_id: primaryPage?.id,
+      page_id: primaryPage?.page_id,
+      page_name: primaryPage?.page_name,
+    })
 
   } catch (error) {
     console.error('OAuth error:', error)
