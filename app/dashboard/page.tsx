@@ -506,14 +506,14 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
   })(); }, [sellerId]);
 
   return (
-    <div style={{ display: "grid", gap: 16, overflow: "hidden" }}>
-      {/* Top row: Summary + Pipeline */}
-      <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: 12 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: mobile ? 10 : 16 }}>
+      {/* Summary + Pipeline: side by side on desktop, stacked on mobile */}
+      <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr 1fr", gap: mobile ? 10 : 16 }}>
         <Card style={{ padding: mobile ? 14 : 20 }}>
           <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textSecondary, marginBottom: 10 }}>আজকের সারসংক্ষেপ</div>
-          <div style={{ display: "flex", gap: mobile ? 16 : 24 }}>
-            <div><div style={{ fontSize: mobile ? 20 : 24, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>{stats.orders}</div><div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>অর্ডার</div></div>
-            <div><div style={{ fontSize: mobile ? 20 : 24, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>৳{stats.revenue.toLocaleString()}</div><div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>আয়</div></div>
+          <div style={{ display: "flex", gap: 20 }}>
+            <div><div style={{ fontSize: mobile ? 22 : 24, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>{stats.orders}</div><div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>অর্ডার</div></div>
+            <div><div style={{ fontSize: mobile ? 22 : 24, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>৳{stats.revenue.toLocaleString()}</div><div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>আয়</div></div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, color: C.yellowText, fontSize: 11, fontFamily: "'Tiro Bangla', serif" }}>
             <span style={{ width: 6, height: 6, borderRadius: 3, background: C.yellowText, display: "inline-block" }} /> {stats.pending} পেন্ডিং
@@ -523,7 +523,7 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
           <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textSecondary, marginBottom: 10 }}>অর্ডার পাইপলাইন</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {[{ label: "নতুন", bg: C.redSoft, color: C.vermillion }, { label: "কনফার্ম", bg: C.blueSoft, color: C.blueText }, { label: "পেমেন্ট", bg: C.purpleSoft, color: C.purpleText }, { label: "শিপড", bg: C.yellowSoft, color: C.yellowText }, { label: "ডেলিভার্ড", bg: C.greenSoft, color: C.greenText }].map(p => (
-              <span key={p.label} style={{ padding: "2px 8px", borderRadius: 20, fontSize: 10, fontFamily: "'Tiro Bangla', serif", background: p.bg, color: p.color, fontWeight: 500 }}>{p.label}</span>
+              <span key={p.label} style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontFamily: "'Tiro Bangla', serif", background: p.bg, color: p.color, fontWeight: 500 }}>{p.label}</span>
             ))}
           </div>
         </Card>
@@ -550,7 +550,7 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
         )}
       </div>
 
-      {/* Mobile: Recent messages as full-width card */}
+      {/* Mobile: Recent messages full-width */}
       {mobile && (
         <Card style={{ padding: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
@@ -563,7 +563,7 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ width: 28, height: 28, borderRadius: 14, background: C.saffronLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: C.saffron, flexShrink: 0 }}>{(m.customer_name || "?")[0]}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.deepInk, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.customer_name || "অজানা"}</div>
+                    <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.deepInk, fontWeight: 500 }}>{m.customer_name || "অজানা"}</div>
                     <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.content}</div>
                   </div>
                 </div>
@@ -573,19 +573,19 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
         </Card>
       )}
 
-      {/* Bottom row: Products + Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr 1fr", gap: 12 }}>
+      {/* Products + Customer stats */}
+      <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr 1fr", gap: mobile ? 10 : 16 }}>
         <Card style={{ padding: mobile ? 14 : 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
             <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textSecondary }}>টপ প্রোডাক্ট</span>
-            <span onClick={() => setPage("products")} style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.vermillion, cursor: "pointer" }}>সব প্রোডাক্ট →</span>
+            <span onClick={() => setPage("products")} style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.vermillion, cursor: "pointer" }}>সব →</span>
           </div>
-          {topProducts.length === 0 ? <EmptyState icon="📦" title="কোনো প্রোডাক্ট নেই" subtitle="প্রোডাক্ট যোগ করুন" /> :
+          {topProducts.length === 0 ? <EmptyState icon="📦" title="প্রোডাক্ট নেই" subtitle="প্রোডাক্ট যোগ করুন" /> :
             topProducts.map((p, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 8, background: C.surfaceBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>📦</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                  <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk, fontWeight: 500 }}>{p.name}</div>
                   <div style={{ fontFamily: "'DM Sans'", fontSize: 12, color: C.textMuted }}>৳{p.price?.toLocaleString()}</div>
                 </div>
               </div>
@@ -593,15 +593,15 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
           }
         </Card>
         <Card style={{ padding: mobile ? 14 : 20 }}>
-          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textSecondary, marginBottom: 12 }}>কাস্টমার ও প্রোডাক্ট</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <div style={{ textAlign: "center", padding: 10, background: C.surfaceBg, borderRadius: 10, overflow: "hidden" }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>{stats.customers}</div>
-              <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>কাস্টমার</div>
+          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textSecondary, marginBottom: 10 }}>কাস্টমার ও প্রোডাক্ট</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1, textAlign: "center", padding: 12, background: C.surfaceBg, borderRadius: 10 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>{stats.customers}</div>
+              <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>কাস্টমার</div>
             </div>
-            <div style={{ textAlign: "center", padding: 10, background: C.surfaceBg, borderRadius: 10, overflow: "hidden" }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>{stats.products}</div>
-              <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>প্রোডাক্ট</div>
+            <div style={{ flex: 1, textAlign: "center", padding: 12, background: C.surfaceBg, borderRadius: 10 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>{stats.products}</div>
+              <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>প্রোডাক্ট</div>
             </div>
           </div>
         </Card>
