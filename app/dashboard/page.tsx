@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 
-// ============ COLORS ============
 const C = {
   vermillion: "#E8220A", vermillionLight: "#FEF0EE",
   saffron: "#F5A623", saffronLight: "#FFF8EB",
@@ -18,6 +17,18 @@ const C = {
   purpleSoft: "#F3E5F5", purpleText: "#6A1B9A",
   pinkSoft: "#FCE4EC", pinkText: "#AD1457",
 };
+
+// ============ RESPONSIVE HOOK ============
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return mobile;
+}
 
 // ============ SHARED COMPONENTS ============
 function NavIcon({ type, active }: { type: string; active: boolean }) {
@@ -55,10 +66,10 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
 
 function EmptyState({ icon, title, subtitle }: { icon: string; title: string; subtitle: string }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 48, color: C.textMuted }}>
-      <div style={{ width: 64, height: 64, borderRadius: 32, background: C.surfaceBg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, fontSize: 28 }}>{icon}</div>
-      <p style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 16, fontWeight: 600, color: C.textSecondary, margin: "0 0 4px" }}>{title}</p>
-      <p style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textMuted, margin: 0 }}>{subtitle}</p>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, color: C.textMuted }}>
+      <div style={{ width: 56, height: 56, borderRadius: 28, background: C.surfaceBg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12, fontSize: 24 }}>{icon}</div>
+      <p style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 15, fontWeight: 600, color: C.textSecondary, margin: "0 0 4px", textAlign: "center" }}>{title}</p>
+      <p style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, margin: 0, textAlign: "center" }}>{subtitle}</p>
     </div>
   );
 }
@@ -66,12 +77,12 @@ function EmptyState({ icon, title, subtitle }: { icon: string; title: string; su
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!open) return null;
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(26,18,8,0.4)", backdropFilter: "blur(4px)" }} />
-      <div style={{ position: "relative", background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 16, padding: 28, width: "100%", maxWidth: 480, maxHeight: "85vh", overflow: "auto" }}>
+      <div style={{ position: "relative", background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: 24, width: "100%", maxWidth: 480, maxHeight: "85vh", overflow: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <h3 style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 18, fontWeight: 600, color: C.deepInk, margin: 0 }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: C.textMuted }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: C.textMuted, padding: 8 }}>✕</button>
         </div>
         {children}
       </div>
@@ -84,7 +95,7 @@ function Input({ label, value, onChange, type = "text", placeholder = "" }: { la
     <div style={{ marginBottom: 14 }}>
       <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, marginBottom: 4 }}>{label}</div>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surfaceBg, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk, outline: "none", boxSizing: "border-box" }} />
+        style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surfaceBg, fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.deepInk, outline: "none", boxSizing: "border-box" }} />
     </div>
   );
 }
@@ -92,7 +103,7 @@ function Input({ label, value, onChange, type = "text", placeholder = "" }: { la
 function Btn({ children, onClick, primary = true, disabled = false, style: s }: { children: React.ReactNode; onClick: () => void; primary?: boolean; disabled?: boolean; style?: React.CSSProperties }) {
   return (
     <button onClick={onClick} disabled={disabled} style={{
-      padding: "9px 20px", borderRadius: 8, border: primary ? "none" : `1px solid ${C.border}`, fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 500, cursor: disabled ? "default" : "pointer",
+      padding: "10px 20px", borderRadius: 8, border: primary ? "none" : `1px solid ${C.border}`, fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 500, cursor: disabled ? "default" : "pointer",
       background: primary ? C.vermillion : C.cardBg, color: primary ? "#fff" : C.textSecondary, opacity: disabled ? 0.6 : 1, transition: "all 0.2s", ...s
     }}>{children}</button>
   );
@@ -111,10 +122,10 @@ function ComingSoonOverlay({ pageName, children }: { pageName: string; children:
     <div style={{ position: "relative" }}>
       <div style={{ filter: "blur(2px)", opacity: 0.4, pointerEvents: "none" }}>{children}</div>
       <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 10 }}>
-        <div style={{ background: C.saffronLight, border: `2px solid ${C.saffron}`, borderRadius: 16, padding: "32px 48px", textAlign: "center" }}>
-          <div style={{ fontSize: 40, marginBottom: 8 }}>🚧</div>
-          <h2 style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 22, color: C.deepInk, margin: "0 0 8px" }}>শীঘ্রই আসছে</h2>
-          <p style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.textMuted, margin: 0 }}>{pageName} ফিচারটি শীঘ্রই চালু হবে</p>
+        <div style={{ background: C.saffronLight, border: `2px solid ${C.saffron}`, borderRadius: 16, padding: "24px 32px", textAlign: "center" }}>
+          <div style={{ fontSize: 36, marginBottom: 8 }}>🚧</div>
+          <h2 style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 20, color: C.deepInk, margin: "0 0 8px" }}>শীঘ্রই আসছে</h2>
+          <p style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textMuted, margin: 0 }}>{pageName} ফিচারটি শীঘ্রই চালু হবে</p>
         </div>
       </div>
     </div>
@@ -143,6 +154,7 @@ const pageLabels: Record<string, string> = {
 
 // ============ PRODUCTS PAGE ============
 function ProductsPage({ sellerId }: { sellerId: string }) {
+  const mobile = useIsMobile();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -163,9 +175,7 @@ function ProductsPage({ sellerId }: { sellerId: string }) {
     setSaving(true);
     await supabase.from("products").insert({ seller_id: sellerId, name: form.name, price: parseFloat(form.price), description: form.description, category: form.category || null, in_stock: form.in_stock });
     setForm({ name: "", price: "", description: "", category: "", in_stock: true });
-    setShowAdd(false);
-    setSaving(false);
-    fetchProducts();
+    setShowAdd(false); setSaving(false); fetchProducts();
   }
 
   async function deleteProduct(id: string) {
@@ -178,29 +188,29 @@ function ProductsPage({ sellerId }: { sellerId: string }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", background: C.cardBg, borderRadius: 8, border: `1px solid ${C.border}`, flex: 1, maxWidth: 300 }}>
+      <div style={{ display: "flex", flexDirection: mobile ? "column" : "row", justifyContent: "flex-end", gap: 12, marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", background: C.cardBg, borderRadius: 8, border: `1px solid ${C.border}`, flex: 1, maxWidth: mobile ? "100%" : 300 }}>
           <span style={{ color: C.textMuted }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="প্রোডাক্ট খুঁজুন..." style={{ border: "none", background: "transparent", outline: "none", width: "100%", fontFamily: "'Tiro Bangla', serif", fontSize: 13 }} />
         </div>
-        <Btn onClick={() => setShowAdd(true)}>+ নতুন প্রোডাক্ট</Btn>
+        <Btn onClick={() => setShowAdd(true)} style={{ width: mobile ? "100%" : "auto" }}>+ নতুন প্রোডাক্ট</Btn>
       </div>
       {loading ? <p style={{ textAlign: "center", color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>লোড হচ্ছে...</p> :
         filtered.length === 0 ? <Card><EmptyState icon="📦" title="কোনো প্রোডাক্ট নেই" subtitle="নতুন প্রোডাক্ট যোগ করুন" /></Card> :
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
           {filtered.map(p => (
             <Card key={p.id} style={{ padding: 0, overflow: "hidden" }}>
-              <div style={{ height: 120, background: C.surfaceBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontSize: 36, opacity: 0.3 }}>📦</span>
+              <div style={{ height: 100, background: C.surfaceBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ fontSize: 32, opacity: 0.3 }}>📦</span>
               </div>
-              <div style={{ padding: 16 }}>
+              <div style={{ padding: 14 }}>
                 <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 600, color: C.deepInk, marginBottom: 4 }}>{p.name}</div>
                 <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 16, fontWeight: 700, color: C.deepInk }}>৳{p.price?.toLocaleString()}</div>
-                <div style={{ display: "flex", gap: 6, marginTop: 10, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <Badge text={p.in_stock ? "স্টক আছে" : "স্টক নেই"} variant={p.in_stock ? "green" : "red"} />
                   {p.category && <Badge text={p.category} variant="gray" />}
                 </div>
-                <button onClick={() => deleteProduct(p.id)} style={{ marginTop: 10, background: "none", border: "none", color: C.redText, fontSize: 11, cursor: "pointer", fontFamily: "'Tiro Bangla', serif" }}>মুছে ফেলুন</button>
+                <button onClick={() => deleteProduct(p.id)} style={{ marginTop: 8, background: "none", border: "none", color: C.redText, fontSize: 11, cursor: "pointer", fontFamily: "'Tiro Bangla', serif", padding: 0 }}>মুছে ফেলুন</button>
               </div>
             </Card>
           ))}
@@ -223,6 +233,7 @@ function ProductsPage({ sellerId }: { sellerId: string }) {
 
 // ============ ORDERS PAGE ============
 function OrdersPage({ sellerId }: { sellerId: string }) {
+  const mobile = useIsMobile();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -231,8 +242,7 @@ function OrdersPage({ sellerId }: { sellerId: string }) {
 
   const fetchOrders = useCallback(async () => {
     const { data } = await supabase.from("orders").select("*").eq("seller_id", sellerId).order("created_at", { ascending: false });
-    setOrders(data || []);
-    setLoading(false);
+    setOrders(data || []); setLoading(false);
   }, [sellerId]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
@@ -242,14 +252,11 @@ function OrdersPage({ sellerId }: { sellerId: string }) {
     setSaving(true);
     await supabase.from("orders").insert({ seller_id: sellerId, customer_name: form.customer_name, product_name: form.product_name, amount: parseFloat(form.amount), status: "new", notes: form.notes });
     setForm({ customer_name: "", product_name: "", amount: "", notes: "" });
-    setShowAdd(false);
-    setSaving(false);
-    fetchOrders();
+    setShowAdd(false); setSaving(false); fetchOrders();
   }
 
   async function updateStatus(id: string, status: string) {
-    await supabase.from("orders").update({ status }).eq("id", id);
-    fetchOrders();
+    await supabase.from("orders").update({ status }).eq("id", id); fetchOrders();
   }
 
   const statuses = [
@@ -263,14 +270,14 @@ function OrdersPage({ sellerId }: { sellerId: string }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginBottom: 20 }}>
-        <Btn onClick={() => setShowAdd(true)}>+ নতুন অর্ডার</Btn>
+        <Btn onClick={() => setShowAdd(true)} style={{ width: mobile ? "100%" : "auto" }}>+ নতুন অর্ডার</Btn>
       </div>
       {loading ? <p style={{ textAlign: "center", color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>লোড হচ্ছে...</p> :
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${statuses.length}, 1fr)`, gap: 12 }}>
+        <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 8 }}>
           {statuses.map(col => {
             const colOrders = orders.filter(o => o.status === col.key);
             return (
-              <div key={col.key} style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, borderTop: `3px solid ${col.border}`, minHeight: 200 }}>
+              <div key={col.key} style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, borderTop: `3px solid ${col.border}`, minHeight: 200, minWidth: mobile ? 260 : 0, flex: mobile ? "0 0 260px" : 1 }}>
                 <div style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between" }}>
                   <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 600, color: col.color }}>{col.label}</span>
                   <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: C.textMuted }}>{colOrders.length}</span>
@@ -283,7 +290,7 @@ function OrdersPage({ sellerId }: { sellerId: string }) {
                       <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, color: C.deepInk, marginTop: 4 }}>৳{o.amount?.toLocaleString()}</div>
                       <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
                         {statuses.filter(s => s.key !== o.status).slice(0, 2).map(s => (
-                          <button key={s.key} onClick={() => updateStatus(o.id, s.key)} style={{ padding: "2px 8px", borderRadius: 4, border: `1px solid ${C.border}`, background: C.cardBg, fontSize: 10, cursor: "pointer", fontFamily: "'Tiro Bangla', serif", color: s.color }}>{s.label}</button>
+                          <button key={s.key} onClick={() => updateStatus(o.id, s.key)} style={{ padding: "3px 8px", borderRadius: 4, border: `1px solid ${C.border}`, background: C.cardBg, fontSize: 10, cursor: "pointer", fontFamily: "'Tiro Bangla', serif", color: s.color }}>{s.label}</button>
                         ))}
                       </div>
                     </div>
@@ -307,17 +314,15 @@ function OrdersPage({ sellerId }: { sellerId: string }) {
 
 // ============ CUSTOMERS PAGE ============
 function CustomersPage({ sellerId }: { sellerId: string }) {
+  const mobile = useIsMobile();
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from("customers").select("*").eq("seller_id", sellerId).order("created_at", { ascending: false });
-      setCustomers(data || []);
-      setLoading(false);
-    })();
-  }, [sellerId]);
+  useEffect(() => { (async () => {
+    const { data } = await supabase.from("customers").select("*").eq("seller_id", sellerId).order("created_at", { ascending: false });
+    setCustomers(data || []); setLoading(false);
+  })(); }, [sellerId]);
 
   const filtered = customers.filter(c => c.name?.toLowerCase().includes(search.toLowerCase()) || c.phone?.includes(search));
   const initials = (n: string) => (n || "?").split(" ").map(w => w[0]).join("").slice(0, 2);
@@ -325,35 +330,55 @@ function CustomersPage({ sellerId }: { sellerId: string }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", background: C.cardBg, borderRadius: 8, border: `1px solid ${C.border}`, flex: 1, maxWidth: 320 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", background: C.cardBg, borderRadius: 8, border: `1px solid ${C.border}`, flex: 1, maxWidth: mobile ? "100%" : 320 }}>
           <span style={{ color: C.textMuted }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="নাম বা ফোন দিয়ে খুঁজুন..." style={{ border: "none", background: "transparent", outline: "none", width: "100%", fontFamily: "'Tiro Bangla', serif", fontSize: 13 }} />
         </div>
       </div>
       {loading ? <p style={{ textAlign: "center", color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>লোড হচ্ছে...</p> :
         filtered.length === 0 ? <Card><EmptyState icon="👥" title="কোনো কাস্টমার নেই" subtitle="কাস্টমার আসলে এখানে দেখাবে" /></Card> :
-        <Card style={{ padding: 0, overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Tiro Bangla', serif", fontSize: 13 }}>
-            <thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>
-              {["কাস্টমার", "ফোন", "মেসেজ", "প্রথম দেখা"].map(h => <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontWeight: 500, color: C.textMuted, fontSize: 12 }}>{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {filtered.map(c => (
-                <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <td style={{ padding: "12px 16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 16, background: C.saffronLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: C.saffron }}>{initials(c.name)}</div>
-                      <span style={{ color: C.deepInk, fontWeight: 500 }}>{c.name || "অজানা"}</span>
-                    </div>
-                  </td>
-                  <td style={{ padding: "12px 16px", color: C.textSecondary, fontFamily: "'DM Sans', sans-serif" }}>{c.phone || "—"}</td>
-                  <td style={{ padding: "12px 16px", color: C.textSecondary }}>{c.message_count || 0}</td>
-                  <td style={{ padding: "12px 16px", color: C.textMuted, fontFamily: "'DM Sans', sans-serif", fontSize: 12 }}>{c.first_seen ? new Date(c.first_seen).toLocaleDateString("bn-BD") : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+        mobile ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {filtered.map(c => (
+              <Card key={c.id} style={{ padding: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 18, background: C.saffronLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600, color: C.saffron }}>{initials(c.name)}</div>
+                  <div>
+                    <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 600, color: C.deepInk }}>{c.name || "অজানা"}</div>
+                    <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: C.textMuted }}>{c.phone || "ফোন নেই"}</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 16, fontSize: 12, color: C.textSecondary, fontFamily: "'Tiro Bangla', serif" }}>
+                  <span>মেসেজ: {c.message_count || 0}</span>
+                  <span>প্রথম দেখা: {c.first_seen ? new Date(c.first_seen).toLocaleDateString("bn-BD") : "—"}</span>
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Tiro Bangla', serif", fontSize: 13 }}>
+              <thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                {["কাস্টমার", "ফোন", "মেসেজ", "প্রথম দেখা"].map(h => <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontWeight: 500, color: C.textMuted, fontSize: 12 }}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {filtered.map(c => (
+                  <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ padding: "12px 16px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 16, background: C.saffronLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: C.saffron }}>{initials(c.name)}</div>
+                        <span style={{ color: C.deepInk, fontWeight: 500 }}>{c.name || "অজানা"}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: "12px 16px", color: C.textSecondary, fontFamily: "'DM Sans', sans-serif" }}>{c.phone || "—"}</td>
+                    <td style={{ padding: "12px 16px", color: C.textSecondary }}>{c.message_count || 0}</td>
+                    <td style={{ padding: "12px 16px", color: C.textMuted, fontFamily: "'DM Sans', sans-serif", fontSize: 12 }}>{c.first_seen ? new Date(c.first_seen).toLocaleDateString("bn-BD") : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )
       }
     </div>
   );
@@ -361,28 +386,64 @@ function CustomersPage({ sellerId }: { sellerId: string }) {
 
 // ============ MESSAGES PAGE ============
 function MessagesPage({ sellerId }: { sellerId: string }) {
+  const mobile = useIsMobile();
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from("messages").select("*").eq("seller_id", sellerId).order("created_at", { ascending: false }).limit(100);
-      setMessages(data || []);
-      setLoading(false);
-    })();
-  }, [sellerId]);
+  useEffect(() => { (async () => {
+    const { data } = await supabase.from("messages").select("*").eq("seller_id", sellerId).order("created_at", { ascending: false }).limit(100);
+    setMessages(data || []); setLoading(false);
+  })(); }, [sellerId]);
 
-  // Group by customer
   const grouped: Record<string, any[]> = {};
-  messages.forEach(m => {
-    const key = m.customer_name || m.facebook_user_id || "unknown";
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(m);
-  });
+  messages.forEach(m => { const key = m.customer_name || m.facebook_user_id || "unknown"; if (!grouped[key]) grouped[key] = []; grouped[key].push(m); });
   const conversations = Object.entries(grouped).map(([name, msgs]) => ({ name, msgs, last: msgs[0] }));
   const selectedMsgs = selected ? (grouped[selected] || []).reverse() : [];
 
+  // Mobile: show list or conversation
+  if (mobile) {
+    if (selected) {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 130px)" }}>
+          <div style={{ padding: 12, borderBottom: `1px solid ${C.border}`, background: C.cardBg, display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: C.textMuted, padding: 4 }}>←</button>
+            <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 600, color: C.deepInk }}>{selected}</span>
+          </div>
+          <div style={{ flex: 1, overflow: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 8, background: C.surfaceBg }}>
+            {selectedMsgs.map((m, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: m.direction === "outgoing" ? "flex-end" : "flex-start" }}>
+                <div style={{ maxWidth: "80%", padding: "8px 12px", borderRadius: 12, background: m.direction === "outgoing" ? C.vermillionLight : C.cardBg, border: `1px solid ${C.border}` }}>
+                  <p style={{ margin: 0, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>{m.content}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                    <span style={{ fontSize: 10, color: C.textMuted }}>{new Date(m.created_at).toLocaleTimeString("bn-BD", { hour: "2-digit", minute: "2-digit" })}</span>
+                    {m.direction === "outgoing" && <span style={{ fontSize: 9, background: C.vermillionLight, color: C.vermillion, padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>⚡ AI</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div>
+        {loading ? <p style={{ textAlign: "center", color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>লোড হচ্ছে...</p> :
+          conversations.length === 0 ? <Card><EmptyState icon="💬" title="কোনো মেসেজ নেই" subtitle="নতুন মেসেজ এখানে দেখাবে" /></Card> :
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            {conversations.map(c => (
+              <div key={c.name} onClick={() => setSelected(c.name)} style={{ padding: 14, background: C.cardBg, borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 500, color: C.deepInk }}>{c.name}</div>
+                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.last.content}</div>
+              </div>
+            ))}
+          </div>
+        }
+      </div>
+    );
+  }
+
+  // Desktop: split panel
   return (
     <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 0, height: "calc(100vh - 130px)", border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
       <div style={{ background: C.cardBg, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column" }}>
@@ -409,8 +470,8 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
                 <div style={{ maxWidth: "70%", padding: "8px 14px", borderRadius: 12, background: m.direction === "outgoing" ? C.vermillionLight : C.cardBg, border: `1px solid ${C.border}` }}>
                   <p style={{ margin: 0, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>{m.content}</p>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-                    <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Sans', sans-serif" }}>{new Date(m.created_at).toLocaleTimeString("bn-BD", { hour: "2-digit", minute: "2-digit" })}</span>
-                    {m.direction === "outgoing" && m.intent === "auto_reply" && <span style={{ fontSize: 9, background: C.vermillionLight, color: C.vermillion, padding: "1px 6px", borderRadius: 4, fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>⚡ AI</span>}
+                    <span style={{ fontSize: 10, color: C.textMuted }}>{new Date(m.created_at).toLocaleTimeString("bn-BD", { hour: "2-digit", minute: "2-digit" })}</span>
+                    {m.direction === "outgoing" && <span style={{ fontSize: 9, background: C.vermillionLight, color: C.vermillion, padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>⚡ AI</span>}
                   </div>
                 </div>
               </div>
@@ -424,56 +485,49 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
 
 // ============ DASHBOARD HOME ============
 function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: string) => void }) {
+  const mobile = useIsMobile();
   const [stats, setStats] = useState({ orders: 0, revenue: 0, pending: 0, customers: 0, products: 0, messages: 0 });
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
 
-  useEffect(() => {
-    (async () => {
-      const [ordersRes, customersRes, productsRes, messagesRes] = await Promise.all([
-        supabase.from("orders").select("*").eq("seller_id", sellerId),
-        supabase.from("customers").select("id").eq("seller_id", sellerId),
-        supabase.from("products").select("*").eq("seller_id", sellerId),
-        supabase.from("messages").select("*").eq("seller_id", sellerId).order("created_at", { ascending: false }).limit(5),
-      ]);
-      const orders = ordersRes.data || [];
-      const revenue = orders.reduce((sum: number, o: any) => sum + (o.amount || 0), 0);
-      const pending = orders.filter((o: any) => o.status === "new").length;
-      setStats({ orders: orders.length, revenue, pending, customers: (customersRes.data || []).length, products: (productsRes.data || []).length, messages: (messagesRes.data || []).length });
-      setTopProducts((productsRes.data || []).slice(0, 3));
-      setRecentMessages(messagesRes.data || []);
-    })();
-  }, [sellerId]);
-
-  const pipeline = [
-    { label: "নতুন", key: "new", bg: C.redSoft, color: C.vermillion },
-    { label: "কনফার্ম", key: "confirmed", bg: C.blueSoft, color: C.blueText },
-    { label: "পেমেন্ট", key: "paid", bg: C.purpleSoft, color: C.purpleText },
-    { label: "শিপড", key: "shipped", bg: C.yellowSoft, color: C.yellowText },
-    { label: "ডেলিভার্ড", key: "delivered", bg: C.greenSoft, color: C.greenText },
-  ];
+  useEffect(() => { (async () => {
+    const [ordersRes, customersRes, productsRes, messagesRes] = await Promise.all([
+      supabase.from("orders").select("*").eq("seller_id", sellerId),
+      supabase.from("customers").select("id").eq("seller_id", sellerId),
+      supabase.from("products").select("*").eq("seller_id", sellerId),
+      supabase.from("messages").select("*").eq("seller_id", sellerId).order("created_at", { ascending: false }).limit(5),
+    ]);
+    const orders = ordersRes.data || [];
+    const revenue = orders.reduce((sum: number, o: any) => sum + (o.amount || 0), 0);
+    const pending = orders.filter((o: any) => o.status === "new").length;
+    setStats({ orders: orders.length, revenue, pending, customers: (customersRes.data || []).length, products: (productsRes.data || []).length, messages: (messagesRes.data || []).length });
+    setTopProducts((productsRes.data || []).slice(0, 3));
+    setRecentMessages(messagesRes.data || []);
+  })(); }, [sellerId]);
 
   return (
-    <div style={{ display: "grid", gap: 20 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20 }}>
+    <div style={{ display: "grid", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr 1fr", gap: 16 }}>
         <Card>
-          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.textSecondary, marginBottom: 16 }}>আজকের সারসংক্ষেপ</div>
-          <div style={{ display: "flex", gap: 32 }}>
-            <div><div style={{ fontSize: 28, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans', sans-serif" }}>{stats.orders}</div><div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>অর্ডার</div></div>
-            <div><div style={{ fontSize: 28, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans', sans-serif" }}>৳{stats.revenue.toLocaleString()}</div><div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>আয়</div></div>
+          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.textSecondary, marginBottom: 12 }}>আজকের সারসংক্ষেপ</div>
+          <div style={{ display: "flex", gap: 24 }}>
+            <div><div style={{ fontSize: 24, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>{stats.orders}</div><div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>অর্ডার</div></div>
+            <div><div style={{ fontSize: 24, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>৳{stats.revenue.toLocaleString()}</div><div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>আয়</div></div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12, color: C.yellowText, fontSize: 12, fontFamily: "'Tiro Bangla', serif" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, color: C.yellowText, fontSize: 12, fontFamily: "'Tiro Bangla', serif" }}>
             <span style={{ width: 8, height: 8, borderRadius: 4, background: C.yellowText, display: "inline-block" }} /> {stats.pending} পেন্ডিং
           </div>
         </Card>
         <Card>
-          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.textSecondary, marginBottom: 16 }}>অর্ডার পাইপলাইন</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {pipeline.map(p => <span key={p.key} style={{ display: "inline-flex", padding: "4px 12px", borderRadius: 20, fontSize: 12, fontFamily: "'Tiro Bangla', serif", background: p.bg, color: p.color, fontWeight: 500 }}>{p.label}</span>)}
+          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.textSecondary, marginBottom: 12 }}>অর্ডার পাইপলাইন</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {[{ label: "নতুন", bg: C.redSoft, color: C.vermillion }, { label: "কনফার্ম", bg: C.blueSoft, color: C.blueText }, { label: "পেমেন্ট", bg: C.purpleSoft, color: C.purpleText }, { label: "শিপড", bg: C.yellowSoft, color: C.yellowText }, { label: "ডেলিভার্ড", bg: C.greenSoft, color: C.greenText }].map(p => (
+              <span key={p.label} style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontFamily: "'Tiro Bangla', serif", background: p.bg, color: p.color, fontWeight: 500 }}>{p.label}</span>
+            ))}
           </div>
         </Card>
         <Card>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
             <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.textSecondary }}>সাম্প্রতিক মেসেজ</span>
             <span onClick={() => setPage("messages")} style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.vermillion, cursor: "pointer" }}>সব দেখুন →</span>
           </div>
@@ -481,7 +535,7 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {recentMessages.slice(0, 3).map((m, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 14, background: C.saffronLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: C.saffron }}>{(m.customer_name || "?")[0]}</div>
+                  <div style={{ width: 28, height: 28, borderRadius: 14, background: C.saffronLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: C.saffron, flexShrink: 0 }}>{(m.customer_name || "?")[0]}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.deepInk, fontWeight: 500 }}>{m.customer_name || "অজানা"}</div>
                     <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.content}</div>
@@ -492,39 +546,39 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
           }
         </Card>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr 1fr", gap: 16 }}>
         <Card>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
             <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.textSecondary }}>টপ প্রোডাক্ট</span>
             <span onClick={() => setPage("products")} style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.vermillion, cursor: "pointer" }}>সব প্রোডাক্ট →</span>
           </div>
           {topProducts.length === 0 ? <EmptyState icon="📦" title="কোনো প্রোডাক্ট নেই" subtitle="প্রোডাক্ট যোগ করুন" /> :
             topProducts.map((p, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 8, background: C.surfaceBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: C.textMuted }}>📦</div>
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: C.surfaceBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>📦</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk, fontWeight: 500 }}>{p.name}</div>
-                  <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: C.textMuted }}>৳{p.price?.toLocaleString()}</div>
+                  <div style={{ fontFamily: "'DM Sans'", fontSize: 12, color: C.textMuted }}>৳{p.price?.toLocaleString()}</div>
                 </div>
               </div>
             ))
           }
         </Card>
         <Card>
-          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.textSecondary, marginBottom: 16 }}>কাস্টমার হাইলাইট</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div style={{ textAlign: "center", padding: 12, background: C.surfaceBg, borderRadius: 10 }}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans', sans-serif" }}>{stats.customers}</div>
+          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.textSecondary, marginBottom: 12 }}>কাস্টমার হাইলাইট</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div style={{ textAlign: "center", padding: 10, background: C.surfaceBg, borderRadius: 10 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>{stats.customers}</div>
               <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>মোট কাস্টমার</div>
             </div>
-            <div style={{ textAlign: "center", padding: 12, background: C.surfaceBg, borderRadius: 10 }}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans', sans-serif" }}>{stats.products}</div>
+            <div style={{ textAlign: "center", padding: 10, background: C.surfaceBg, borderRadius: 10 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.deepInk, fontFamily: "'DM Sans'" }}>{stats.products}</div>
               <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>প্রোডাক্ট</div>
             </div>
           </div>
         </Card>
         <Card>
-          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.textSecondary, marginBottom: 16 }}>কুরিয়ার স্ট্যাটাস</div>
+          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.textSecondary, marginBottom: 12 }}>কুরিয়ার স্ট্যাটাস</div>
           <EmptyState icon="🚚" title="শীঘ্রই আসছে" subtitle="কুরিয়ার ইন্টিগ্রেশন চালু হবে" />
         </Card>
       </div>
@@ -542,52 +596,27 @@ function AutoReplyPage({ sellerId }: { sellerId: string }) {
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
 
-  // Load settings from Supabase
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from("seller_settings").select("*").eq("seller_id", sellerId).single();
-      if (data) {
-        setBotOn(data.bot_enabled ?? true);
-        setCommentReply(data.comment_reply ?? true);
-        setMessengerReply(data.messenger_reply ?? true);
-        setTone(data.reply_tone || "formal");
-        setLang(data.reply_language || "bangla");
-      }
-      setLoading(false);
-    })();
-  }, [sellerId]);
+  useEffect(() => { (async () => {
+    const { data } = await supabase.from("seller_settings").select("*").eq("seller_id", sellerId).single();
+    if (data) { setBotOn(data.bot_enabled ?? true); setCommentReply(data.comment_reply ?? true); setMessengerReply(data.messenger_reply ?? true); setTone(data.reply_tone || "formal"); setLang(data.reply_language || "bangla"); }
+    setLoading(false);
+  })(); }, [sellerId]);
 
-  // Save settings to Supabase
   async function saveSettings(updates: Record<string, any>) {
     const { data: existing } = await supabase.from("seller_settings").select("id").eq("seller_id", sellerId).single();
-    if (existing) {
-      await supabase.from("seller_settings").update(updates).eq("seller_id", sellerId);
-    } else {
-      await supabase.from("seller_settings").insert({ seller_id: sellerId, ...updates });
-    }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (existing) await supabase.from("seller_settings").update(updates).eq("seller_id", sellerId);
+    else await supabase.from("seller_settings").insert({ seller_id: sellerId, ...updates });
+    setSaved(true); setTimeout(() => setSaved(false), 2000);
   }
 
-  function handleToggle(field: string, value: boolean, setter: (v: boolean) => void) {
-    setter(value);
-    saveSettings({ [field]: value });
-  }
-
-  function handleSelect(field: string, value: string, setter: (v: string) => void) {
-    setter(value);
-    saveSettings({ [field]: value });
-  }
+  function handleToggle(field: string, value: boolean, setter: (v: boolean) => void) { setter(value); saveSettings({ [field]: value }); }
+  function handleSelect(field: string, value: string, setter: (v: string) => void) { setter(value); saveSettings({ [field]: value }); }
 
   if (loading) return <p style={{ textAlign: "center", color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>লোড হচ্ছে...</p>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 680 }}>
-      {saved && (
-        <div style={{ padding: "8px 16px", background: C.greenSoft, border: `1px solid ${C.greenText}`, borderRadius: 8, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.greenText, textAlign: "center" }}>
-          ✓ সেটিংস সেভ হয়েছে
-        </div>
-      )}
+      {saved && <div style={{ padding: "8px 16px", background: C.greenSoft, border: `1px solid ${C.greenText}`, borderRadius: 8, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.greenText, textAlign: "center" }}>✓ সেটিংস সেভ হয়েছে</div>}
       <Card style={{ display: "flex", alignItems: "center", gap: 16 }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: C.surfaceBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🤖</div>
         <div style={{ flex: 1 }}>
@@ -601,14 +630,13 @@ function AutoReplyPage({ sellerId }: { sellerId: string }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
           <div>
             <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, marginBottom: 6 }}>রিপ্লাই টোন</div>
-            <select value={tone} onChange={e => handleSelect("reply_tone", e.target.value, setTone)} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.cardBg, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>
-              <option value="formal">ফর্মাল (আপনি)</option>
-              <option value="casual">ক্যাজুয়াল (তুমি)</option>
+            <select value={tone} onChange={e => handleSelect("reply_tone", e.target.value, setTone)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.cardBg, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>
+              <option value="formal">ফর্মাল (আপনি)</option><option value="casual">ক্যাজুয়াল (তুমি)</option>
             </select>
           </div>
           <div>
             <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, marginBottom: 6 }}>ভাষা</div>
-            <select value={lang} onChange={e => handleSelect("reply_language", e.target.value, setLang)} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.cardBg, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>
+            <select value={lang} onChange={e => handleSelect("reply_language", e.target.value, setLang)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.cardBg, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>
               <option value="bangla">বাংলা</option><option value="english">English</option><option value="mixed">Mixed</option>
             </select>
           </div>
@@ -634,13 +662,12 @@ function SettingsPage({ sellerId, pageName }: { sellerId: string; pageName: stri
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}><span style={{ fontSize: 18 }}>🏪</span><span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 15, fontWeight: 600, color: C.deepInk }}>দোকানের তথ্য</span></div>
         <Input label="দোকানের নাম" value={pageName} onChange={() => {}} />
         <Input label="Seller ID" value={sellerId} onChange={() => {}} />
-        <p style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted }}>সেটিংস শীঘ্রই এডিটেবল হবে।</p>
       </Card>
       <Card>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}><span style={{ fontSize: 18 }}>🔌</span><span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 15, fontWeight: 600, color: C.deepInk }}>কানেকশন</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, background: C.greenSoft, borderRadius: 8 }}>
           <span style={{ fontSize: 20 }}>✅</span>
-          <div><div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 600, color: C.greenText }}>Facebook Page কানেক্টেড</div><div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: C.textMuted }}>{pageName}</div></div>
+          <div><div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 600, color: C.greenText }}>Facebook Page কানেক্টেড</div><div style={{ fontFamily: "'DM Sans'", fontSize: 11, color: C.textMuted }}>{pageName}</div></div>
         </div>
       </Card>
     </div>
@@ -654,10 +681,12 @@ function HisabPage() { return <ComingSoonOverlay pageName="হিসাব"><Car
 
 // ============ MAIN DASHBOARD ============
 export default function DashboardPage() {
+  const mobile = useIsMobile();
   const [activePage, setActivePage] = useState("dashboard");
   const [sellerId, setSellerId] = useState<string | null>(null);
   const [pageName, setPageName] = useState("আপনার দোকান");
   const [notConnected, setNotConnected] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const sid = localStorage.getItem("damkoto_seller_id");
@@ -673,13 +702,18 @@ export default function DashboardPage() {
     window.location.href = `https://www.facebook.com/v22.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
   }
 
+  function navigateTo(page: string) {
+    setActivePage(page);
+    if (mobile) setSidebarOpen(false);
+  }
+
   if (notConnected) {
     return (
-      <div style={{ minHeight: "100vh", background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ textAlign: "center", maxWidth: 400 }}>
+      <div style={{ minHeight: "100vh", background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <div style={{ textAlign: "center", maxWidth: 400, width: "100%" }}>
           <img src="/damkoto-logo.png" alt="দাম কত?" style={{ height: 48, marginBottom: 24 }} />
           <Card>
-            <h2 style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 20, color: C.deepInk, margin: "0 0 12px" }}>প্রথমে আপনার Facebook Page কানেক্ট করুন</h2>
+            <h2 style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 18, color: C.deepInk, margin: "0 0 12px" }}>প্রথমে আপনার Facebook Page কানেক্ট করুন</h2>
             <p style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textMuted, margin: "0 0 20px" }}>ড্যাশবোর্ড ব্যবহার করতে আপনার Facebook Page কানেক্ট করতে হবে।</p>
             <Btn onClick={connectFacebook} style={{ width: "100%" }}>🔗 Facebook Page কানেক্ট করুন</Btn>
           </Card>
@@ -692,7 +726,7 @@ export default function DashboardPage() {
 
   const renderPage = () => {
     switch (activePage) {
-      case "dashboard": return <DashboardHome sellerId={sellerId} setPage={setActivePage} />;
+      case "dashboard": return <DashboardHome sellerId={sellerId} setPage={navigateTo} />;
       case "messages": return <MessagesPage sellerId={sellerId} />;
       case "orders": return <OrdersPage sellerId={sellerId} />;
       case "products": return <ProductsPage sellerId={sellerId} />;
@@ -702,18 +736,28 @@ export default function DashboardPage() {
       case "courier": return <CourierPage />;
       case "payment": return <PaymentPage />;
       case "hisab": return <HisabPage />;
-      default: return <DashboardHome sellerId={sellerId} setPage={setActivePage} />;
+      default: return <DashboardHome sellerId={sellerId} setPage={navigateTo} />;
     }
   };
 
   return (
     <div style={{ display: "flex", height: "100vh", fontFamily: "'DM Sans', sans-serif", background: C.offWhite, overflow: "hidden" }}>
-      <aside style={{ width: 220, background: C.cardBg, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", flexShrink: 0, height: "100vh" }}>
-        <div style={{ padding: "14px 16px 10px" }}><img src="/damkoto-logo.png" alt="দাম কত?" style={{ height: 44, width: "auto" }} /></div>
+      {/* Mobile overlay */}
+      {mobile && sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(26,18,8,0.4)", zIndex: 90 }} />}
+
+      {/* Sidebar */}
+      <aside style={{
+        width: 220, background: C.cardBg, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", flexShrink: 0, height: "100vh",
+        ...(mobile ? { position: "fixed", left: sidebarOpen ? 0 : -240, top: 0, zIndex: 100, transition: "left 0.25s ease", boxShadow: sidebarOpen ? "4px 0 20px rgba(26,18,8,0.15)" : "none" } : {})
+      }}>
+        <div style={{ padding: "14px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <img src="/damkoto-logo.png" alt="দাম কত?" style={{ height: 40, width: "auto" }} />
+          {mobile && <button onClick={() => setSidebarOpen(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: C.textMuted }}>✕</button>}
+        </div>
         <nav style={{ flex: 1, padding: "4px 8px", overflowY: "auto" }}>
           {navItems.map(item => {
             const active = activePage === item.id;
-            return <button key={item.id} onClick={() => setActivePage(item.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 8, border: "none", background: active ? C.vermillionLight : "transparent", color: active ? C.vermillion : C.textSecondary, cursor: "pointer", fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: active ? 600 : 400, marginBottom: 2, transition: "all 0.15s" }}><NavIcon type={item.icon} active={active} />{item.label}</button>;
+            return <button key={item.id} onClick={() => navigateTo(item.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: "none", background: active ? C.vermillionLight : "transparent", color: active ? C.vermillion : C.textSecondary, cursor: "pointer", fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: active ? 600 : 400, marginBottom: 2, transition: "all 0.15s" }}><NavIcon type={item.icon} active={active} />{item.label}</button>;
           })}
         </nav>
         <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.border}` }}>
@@ -724,16 +768,22 @@ export default function DashboardPage() {
           </div>
         </div>
       </aside>
+
+      {/* Main Content */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <header style={{ height: 52, background: C.cardBg, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px", flexShrink: 0 }}>
-          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textMuted }}>{pageName}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        {/* Top Bar */}
+        <header style={{ height: 52, background: C.cardBg, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {mobile && <button onClick={() => setSidebarOpen(true)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.textSecondary, padding: 4 }}>☰</button>}
+            <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textMuted }}>{pageName}</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ position: "relative", cursor: "pointer" }}><span style={{ fontSize: 18, color: C.textMuted }}>🔔</span></div>
             <div style={{ width: 30, height: 30, borderRadius: 15, background: C.surfaceBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: C.textMuted, cursor: "pointer" }}>👤</div>
           </div>
         </header>
-        <main style={{ flex: 1, overflow: "auto", padding: 24 }}>
-          <h1 style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: 22, fontWeight: 600, color: C.deepInk, margin: "0 0 20px" }}>{pageLabels[activePage]}</h1>
+        <main style={{ flex: 1, overflow: "auto", padding: mobile ? 14 : 24 }}>
+          <h1 style={{ fontFamily: "'Noto Serif Bengali', serif", fontSize: mobile ? 18 : 22, fontWeight: 600, color: C.deepInk, margin: "0 0 16px" }}>{pageLabels[activePage]}</h1>
           {renderPage()}
         </main>
       </div>
