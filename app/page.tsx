@@ -206,6 +206,7 @@ export default function Landing() {
               <div style={{ width: 44, height: 44, borderRadius: 12, background: f.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, marginBottom: 12 }}>{f.icon}</div>
               <h3 style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 15, fontWeight: 600, color: "#1A1208", margin: "0 0 6px" }}>{f.title}</h3>
               <p style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: "#5C4F3A", margin: 0, lineHeight: 1.7 }}>{f.desc}</p>
+	      <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 11, color: "#8C7E6A", margin: "4px 0 0" }}>© 2026 Gazi Tasin Rahman. All rights reserved.</p>
             </div>
           ))}
         </div>
