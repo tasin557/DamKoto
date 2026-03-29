@@ -290,7 +290,16 @@ function OrdersPage({ sellerId }: { sellerId: string }) {
   }, [fetchOrders, sellerId]);
 
   async function updateStatus(id: string, status: string) {
-    await supabase.from("orders").update({ status }).eq("id", id);
+    try {
+      await fetch("https://damkoto-backend-production.up.railway.app/api/orders/" + id + "/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+    } catch (e) {
+      // Fallback to direct Supabase if backend is unreachable
+      await supabase.from("orders").update({ status }).eq("id", id);
+    }
     fetchOrders();
     if (selectedOrder?.id === id) setSelectedOrder((prev: any) => prev ? { ...prev, status } : null);
   }
