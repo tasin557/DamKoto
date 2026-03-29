@@ -231,13 +231,52 @@ function ProductsPage({ sellerId }: { sellerId: string }) {
   );
 }
 
+// ============ ORDERS HELPERS ============
+function parseOrderNotes(notes: string): { phone?: string; address?: string; deliveryCharge?: string } {
+  const result: any = {};
+  if (!notes) return result;
+  const phoneMatch = notes.match(/ফোন:\s*([^|]+)/);
+  if (phoneMatch) result.phone = phoneMatch[1].trim();
+  const addressMatch = notes.match(/ঠিকানা:\s*([^|]+)/);
+  if (addressMatch) result.address = addressMatch[1].trim();
+  const deliveryMatch = notes.match(/ডেলিভারি:\s*([^|]+)/);
+  if (deliveryMatch) result.deliveryCharge = deliveryMatch[1].trim();
+  return result;
+}
+
+const ORDER_STATUSES = [
+  { key: "new", label: "নতুন", color: "#E8220A", bg: "#FEF0EE", border: "#E8220A" },
+  { key: "confirmed", label: "কনফার্ম", color: "#1565C0", bg: "#E3F2FD", border: "#1565C0" },
+  { key: "paid", label: "পেমেন্ট", color: "#6A1B9A", bg: "#F3E5F5", border: "#6A1B9A" },
+  { key: "shipped", label: "শিপড", color: "#F57F17", bg: "#FFF8E1", border: "#F57F17" },
+  { key: "delivered", label: "ডেলিভার্ড", color: "#2E7D32", bg: "#E8F5E9", border: "#2E7D32" },
+  { key: "cancelled", label: "ক্যান্সেলড", color: "#5C4F3A", bg: "#F0ECE3", border: "#5C4F3A" },
+];
+
+const STATUS_FLOW = ["new", "confirmed", "paid", "shipped", "delivered"];
+
+function getNextStatus(current: string): string | null {
+  const i = STATUS_FLOW.indexOf(current);
+  return i >= 0 && i < STATUS_FLOW.length - 1 ? STATUS_FLOW[i + 1] : null;
+}
+function getPrevStatus(current: string): string | null {
+  const i = STATUS_FLOW.indexOf(current);
+  return i > 0 ? STATUS_FLOW[i - 1] : null;
+}
+function getStatusInfo(key: string) { return ORDER_STATUSES.find(s => s.key === key) || ORDER_STATUSES[0]; }
+
 // ============ ORDERS PAGE ============
 function OrdersPage({ sellerId }: { sellerId: string }) {
   const mobile = useIsMobile();
   const [orders, setOrders] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<"list" | "kanban">("list");
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ customer_name: "", product_name: "", amount: "", notes: "" });
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [addForm, setAddForm] = useState({ customer_name: "", phone: "", product_name: "", amount: "", address: "", delivery_charge: "0", notes: "" });
   const [saving, setSaving] = useState(false);
 
   const fetchOrders = useCallback(async () => {
@@ -245,68 +284,227 @@ function OrdersPage({ sellerId }: { sellerId: string }) {
     setOrders(data || []); setLoading(false);
   }, [sellerId]);
 
-  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  useEffect(() => {
+    fetchOrders();
+    supabase.from("products").select("name, price").eq("seller_id", sellerId).eq("in_stock", true).then(({ data }) => setProducts(data || []));
+  }, [fetchOrders, sellerId]);
+
+  async function updateStatus(id: string, status: string) {
+    await supabase.from("orders").update({ status }).eq("id", id);
+    fetchOrders();
+    if (selectedOrder?.id === id) setSelectedOrder((prev: any) => prev ? { ...prev, status } : null);
+  }
 
   async function addOrder() {
-    if (!form.customer_name || !form.amount) return;
+    if (!addForm.customer_name || !addForm.amount) return;
     setSaving(true);
-    await supabase.from("orders").insert({ seller_id: sellerId, customer_name: form.customer_name, product_name: form.product_name, amount: parseFloat(form.amount), status: "new", notes: form.notes });
-    setForm({ customer_name: "", product_name: "", amount: "", notes: "" });
+    const notes = `ফোন: ${addForm.phone || "—"} | ঠিকানা: ${addForm.address || "—"} | ডেলিভারি: ৳${addForm.delivery_charge || "0"}${addForm.notes ? " | " + addForm.notes : ""}`;
+    const totalAmount = parseFloat(addForm.amount) + (parseFloat(addForm.delivery_charge) || 0);
+    await supabase.from("orders").insert({ seller_id: sellerId, customer_name: addForm.customer_name, product_name: addForm.product_name, amount: totalAmount, status: "new", notes });
+    setAddForm({ customer_name: "", phone: "", product_name: "", amount: "", address: "", delivery_charge: "0", notes: "" });
     setShowAdd(false); setSaving(false); fetchOrders();
   }
 
-  async function updateStatus(id: string, status: string) {
-    await supabase.from("orders").update({ status }).eq("id", id); fetchOrders();
-  }
+  // Filter + search
+  const filtered = orders.filter(o => {
+    if (filter !== "all" && o.status !== filter) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      const parsed = parseOrderNotes(o.notes);
+      return (o.customer_name || "").toLowerCase().includes(s) || (o.product_name || "").toLowerCase().includes(s) || (parsed.phone || "").includes(s);
+    }
+    return true;
+  });
 
-  const statuses = [
-    { key: "new", label: "নতুন", color: C.vermillion, border: "#E8220A" },
-    { key: "confirmed", label: "কনফার্ম", color: C.blueText, border: "#1565C0" },
-    { key: "paid", label: "পেমেন্ট", color: C.purpleText, border: "#6A1B9A" },
-    { key: "shipped", label: "শিপড", color: C.yellowText, border: "#F57F17" },
-    { key: "delivered", label: "ডেলিভার্ড", color: C.greenText, border: "#2E7D32" },
-  ];
+  // Stats
+  const statusCounts: Record<string, number> = { all: orders.length };
+  ORDER_STATUSES.forEach(s => { statusCounts[s.key] = orders.filter(o => o.status === s.key).length; });
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginBottom: 20 }}>
-        <Btn onClick={() => setShowAdd(true)} style={{ width: mobile ? "100%" : "auto" }}>+ নতুন অর্ডার</Btn>
+      {/* Stats bar */}
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 12 }}>
+        {[{ key: "all", label: "মোট" }, ...ORDER_STATUSES].map(s => (
+          <button key={s.key} onClick={() => setFilter(s.key)} style={{
+            padding: "4px 12px", borderRadius: 20, border: "none", fontSize: 11, fontFamily: "'Tiro Bangla', serif", cursor: "pointer", whiteSpace: "nowrap", fontWeight: 500,
+            background: filter === s.key ? (getStatusInfo(s.key).bg || C.vermillionLight) : C.surfaceBg,
+            color: filter === s.key ? (getStatusInfo(s.key).color || C.vermillion) : C.textMuted,
+          }}>
+            {s.label} ({statusCounts[s.key] || 0})
+          </button>
+        ))}
       </div>
+
+      {/* Controls */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexDirection: mobile ? "column" : "row" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", background: C.cardBg, borderRadius: 8, border: `1px solid ${C.border}`, flex: 1 }}>
+          <span style={{ color: C.textMuted, fontSize: 14 }}>🔍</span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="নাম, প্রোডাক্ট বা ফোন..." style={{ border: "none", background: "transparent", outline: "none", width: "100%", fontFamily: "'Tiro Bangla', serif", fontSize: 13 }} />
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: `1px solid ${C.border}` }}>
+            <button onClick={() => setView("list")} style={{ padding: "7px 12px", border: "none", background: view === "list" ? C.vermillion : C.cardBg, color: view === "list" ? "#fff" : C.textMuted, cursor: "pointer", fontSize: 12, fontFamily: "'Tiro Bangla', serif" }}>📋 তালিকা</button>
+            <button onClick={() => setView("kanban")} style={{ padding: "7px 12px", border: "none", borderLeft: `1px solid ${C.border}`, background: view === "kanban" ? C.vermillion : C.cardBg, color: view === "kanban" ? "#fff" : C.textMuted, cursor: "pointer", fontSize: 12, fontFamily: "'Tiro Bangla', serif" }}>📊 কানবান</button>
+          </div>
+          <Btn onClick={() => setShowAdd(true)} style={{ whiteSpace: "nowrap" }}>+ নতুন অর্ডার</Btn>
+        </div>
+      </div>
+
       {loading ? <p style={{ textAlign: "center", color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>লোড হচ্ছে...</p> :
-        <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 8 }}>
-          {statuses.map(col => {
-            const colOrders = orders.filter(o => o.status === col.key);
-            return (
-              <div key={col.key} style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, borderTop: `3px solid ${col.border}`, minHeight: 200, minWidth: mobile ? 260 : 0, flex: mobile ? "0 0 260px" : 1 }}>
-                <div style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 600, color: col.color }}>{col.label}</span>
-                  <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: C.textMuted }}>{colOrders.length}</span>
-                </div>
-                <div style={{ padding: "0 8px 8px", display: "flex", flexDirection: "column", gap: 8 }}>
-                  {colOrders.map(o => (
-                    <div key={o.id} style={{ background: C.surfaceBg, borderRadius: 8, padding: 10, fontSize: 12 }}>
-                      <div style={{ fontFamily: "'Tiro Bangla', serif", fontWeight: 600, color: C.deepInk }}>{o.customer_name}</div>
-                      {o.product_name && <div style={{ fontFamily: "'Tiro Bangla', serif", color: C.textMuted, fontSize: 11 }}>{o.product_name}</div>}
-                      <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, color: C.deepInk, marginTop: 4 }}>৳{o.amount?.toLocaleString()}</div>
-                      <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
-                        {statuses.filter(s => s.key !== o.status).slice(0, 2).map(s => (
-                          <button key={s.key} onClick={() => updateStatus(o.id, s.key)} style={{ padding: "3px 8px", borderRadius: 4, border: `1px solid ${C.border}`, background: C.cardBg, fontSize: 10, cursor: "pointer", fontFamily: "'Tiro Bangla', serif", color: s.color }}>{s.label}</button>
-                        ))}
-                      </div>
+        filtered.length === 0 ? <Card><EmptyState icon="📦" title="কোনো অর্ডার নেই" subtitle="নতুন অর্ডার যোগ করুন বা ফিল্টার পরিবর্তন করুন" /></Card> :
+
+        view === "list" ? (
+          /* === LIST VIEW === */
+          mobile ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {filtered.map(o => {
+                const info = getStatusInfo(o.status);
+                const parsed = parseOrderNotes(o.notes);
+                return (
+                  <div key={o.id} onClick={() => setSelectedOrder(o)} style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, cursor: "pointer", borderLeft: `3px solid ${info.border}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 600, color: C.deepInk }}>{o.customer_name}</span>
+                      <span style={{ padding: "2px 8px", borderRadius: 12, fontSize: 10, fontWeight: 500, background: info.bg, color: info.color, fontFamily: "'Tiro Bangla', serif" }}>{info.label}</span>
                     </div>
+                    <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted }}>{o.product_name}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
+                      <span style={{ fontFamily: "'DM Sans'", fontSize: 15, fontWeight: 700, color: C.deepInk }}>৳{o.amount?.toLocaleString()}</span>
+                      <span style={{ fontFamily: "'DM Sans'", fontSize: 11, color: C.textMuted }}>{parsed.phone || ""}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <Card style={{ padding: 0, overflow: "hidden" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'Tiro Bangla', serif", fontSize: 13 }}>
+                <thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  {["কাস্টমার", "প্রোডাক্ট", "ফোন", "পরিমাণ", "স্ট্যাটাস", "তারিখ"].map(h => (
+                    <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontWeight: 500, color: C.textMuted, fontSize: 11 }}>{h}</th>
                   ))}
+                </tr></thead>
+                <tbody>
+                  {filtered.map(o => {
+                    const info = getStatusInfo(o.status);
+                    const parsed = parseOrderNotes(o.notes);
+                    return (
+                      <tr key={o.id} onClick={() => setSelectedOrder(o)} style={{ borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+                        <td style={{ padding: "10px 14px", fontWeight: 500, color: C.deepInk }}>{o.customer_name}</td>
+                        <td style={{ padding: "10px 14px", color: C.textSecondary }}>{o.product_name || "—"}</td>
+                        <td style={{ padding: "10px 14px", color: C.textSecondary, fontFamily: "'DM Sans'" }}>{parsed.phone || "—"}</td>
+                        <td style={{ padding: "10px 14px", fontWeight: 600, color: C.deepInk, fontFamily: "'DM Sans'" }}>৳{o.amount?.toLocaleString()}</td>
+                        <td style={{ padding: "10px 14px" }}><span style={{ padding: "2px 8px", borderRadius: 12, fontSize: 10, fontWeight: 500, background: info.bg, color: info.color }}>{info.label}</span></td>
+                        <td style={{ padding: "10px 14px", fontSize: 11, color: C.textMuted, fontFamily: "'DM Sans'" }}>{o.created_at ? new Date(o.created_at).toLocaleDateString("bn-BD") : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </Card>
+          )
+        ) : (
+          /* === KANBAN VIEW === */
+          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
+            {ORDER_STATUSES.map(col => {
+              const colOrders = filtered.filter(o => o.status === col.key);
+              return (
+                <div key={col.key} style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, borderTop: `3px solid ${col.border}`, minHeight: 160, minWidth: mobile ? 240 : 0, flex: mobile ? "0 0 240px" : 1 }}>
+                  <div style={{ padding: "10px 12px", display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, fontWeight: 600, color: col.color }}>{col.label}</span>
+                    <span style={{ fontFamily: "'DM Sans'", fontSize: 11, color: C.textMuted }}>{colOrders.length}</span>
+                  </div>
+                  <div style={{ padding: "0 6px 6px", display: "flex", flexDirection: "column", gap: 6 }}>
+                    {colOrders.map(o => {
+                      const parsed = parseOrderNotes(o.notes);
+                      const next = getNextStatus(o.status);
+                      const prev = getPrevStatus(o.status);
+                      return (
+                        <div key={o.id} onClick={() => setSelectedOrder(o)} style={{ background: C.surfaceBg, borderRadius: 8, padding: 10, fontSize: 11, cursor: "pointer" }}>
+                          <div style={{ fontFamily: "'Tiro Bangla', serif", fontWeight: 600, color: C.deepInk, fontSize: 12 }}>{o.customer_name}</div>
+                          {o.product_name && <div style={{ fontFamily: "'Tiro Bangla', serif", color: C.textMuted, fontSize: 10 }}>{o.product_name}</div>}
+                          <div style={{ fontFamily: "'DM Sans'", fontWeight: 600, color: C.deepInk, marginTop: 3 }}>৳{o.amount?.toLocaleString()}</div>
+                          {parsed.phone && <div style={{ fontFamily: "'DM Sans'", color: C.textMuted, fontSize: 10, marginTop: 2 }}>📱 {parsed.phone}</div>}
+                          <div style={{ display: "flex", gap: 3, marginTop: 6, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
+                            {prev && <button onClick={() => updateStatus(o.id, prev)} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.border}`, background: C.cardBg, fontSize: 9, cursor: "pointer", fontFamily: "'Tiro Bangla', serif", color: C.textMuted }}>← {getStatusInfo(prev).label}</button>}
+                            {next && <button onClick={() => updateStatus(o.id, next)} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.border}`, background: getStatusInfo(next).bg, fontSize: 9, cursor: "pointer", fontFamily: "'Tiro Bangla', serif", color: getStatusInfo(next).color }}>{getStatusInfo(next).label} →</button>}
+                            {o.status !== "cancelled" && <button onClick={() => updateStatus(o.id, "cancelled")} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.border}`, background: C.cardBg, fontSize: 9, cursor: "pointer", color: C.textMuted }}>✕</button>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      }
+
+      {/* Order Detail Modal */}
+      <Modal open={!!selectedOrder} onClose={() => setSelectedOrder(null)} title="অর্ডারের বিস্তারিত">
+        {selectedOrder && (() => {
+          const o = selectedOrder;
+          const info = getStatusInfo(o.status);
+          const parsed = parseOrderNotes(o.notes);
+          const next = getNextStatus(o.status);
+          const prev = getPrevStatus(o.status);
+          const nextLabels: Record<string, string> = { confirmed: "✅ কনফার্ম করুন", paid: "💳 পেমেন্ট হয়েছে", shipped: "🚚 শিপড করুন", delivered: "✅ ডেলিভার্ড" };
+          return (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <span style={{ padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 500, background: info.bg, color: info.color, fontFamily: "'Tiro Bangla', serif" }}>{info.label}</span>
+                <span style={{ fontFamily: "'DM Sans'", fontSize: 11, color: C.textMuted }}>{o.created_at ? new Date(o.created_at).toLocaleDateString("bn-BD") + " " + new Date(o.created_at).toLocaleTimeString("bn-BD", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
+              </div>
+              {/* Customer */}
+              <div style={{ padding: 12, background: C.surfaceBg, borderRadius: 8, marginBottom: 10 }}>
+                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>কাস্টমার তথ্য</div>
+                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 600, color: C.deepInk }}>👤 {o.customer_name}</div>
+                {parsed.phone && <div style={{ marginTop: 4 }}><a href={`tel:${parsed.phone}`} style={{ fontFamily: "'DM Sans'", fontSize: 13, color: C.blueText, textDecoration: "none" }}>📱 {parsed.phone}</a></div>}
+                {parsed.address && <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textSecondary, marginTop: 4 }}>📍 {parsed.address}</div>}
+              </div>
+              {/* Order info */}
+              <div style={{ padding: 12, background: C.surfaceBg, borderRadius: 8, marginBottom: 10 }}>
+                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>অর্ডার তথ্য</div>
+                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>📦 {o.product_name || "—"}</div>
+                {parsed.deliveryCharge && <div style={{ fontFamily: "'DM Sans'", fontSize: 12, color: C.textSecondary, marginTop: 4 }}>🚚 ডেলিভারি: {parsed.deliveryCharge}</div>}
+                <div style={{ fontFamily: "'DM Sans'", fontSize: 18, fontWeight: 700, color: C.deepInk, marginTop: 8 }}>💵 মোট: ৳{o.amount?.toLocaleString()}</div>
+              </div>
+              {/* Actions */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                {next && <Btn onClick={() => { updateStatus(o.id, next); }} style={{ width: "100%", padding: 12 }}>{nextLabels[next] || next}</Btn>}
+                <div style={{ display: "flex", gap: 8 }}>
+                  {prev && <Btn onClick={() => updateStatus(o.id, prev)} primary={false} style={{ flex: 1 }}>← {getStatusInfo(prev).label}</Btn>}
+                  {o.status === "cancelled" ? (
+                    <Btn onClick={() => updateStatus(o.id, "new")} primary={false} style={{ flex: 1 }}>🔄 আবার চালু</Btn>
+                  ) : (
+                    <Btn onClick={() => updateStatus(o.id, "cancelled")} primary={false} style={{ flex: 1, color: C.redText }}>❌ ক্যান্সেল</Btn>
+                  )}
                 </div>
               </div>
-            );
-          })}
-        </div>
-      }
+            </div>
+          );
+        })()}
+      </Modal>
+
+      {/* Add Order Modal */}
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="নতুন অর্ডার যোগ করুন">
-        <Input label="কাস্টমারের নাম *" value={form.customer_name} onChange={v => setForm({ ...form, customer_name: v })} placeholder="রাহেলা বেগম" />
-        <Input label="প্রোডাক্ট" value={form.product_name} onChange={v => setForm({ ...form, product_name: v })} placeholder="জামদানি শাড়ি" />
-        <Input label="পরিমাণ (৳) *" value={form.amount} onChange={v => setForm({ ...form, amount: v })} type="number" placeholder="3500" />
-        <Input label="নোট" value={form.notes} onChange={v => setForm({ ...form, notes: v })} placeholder="অতিরিক্ত তথ্য" />
-        <Btn onClick={addOrder} disabled={saving || !form.customer_name || !form.amount} style={{ width: "100%" }}>{saving ? "সেভ হচ্ছে..." : "অর্ডার যোগ করুন"}</Btn>
+        <Input label="কাস্টমারের নাম *" value={addForm.customer_name} onChange={v => setAddForm({ ...addForm, customer_name: v })} placeholder="রাহেলা বেগম" />
+        <Input label="ফোন নম্বর *" value={addForm.phone} onChange={v => setAddForm({ ...addForm, phone: v })} placeholder="01XXXXXXXXX" />
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, marginBottom: 4 }}>প্রোডাক্ট *</div>
+          <select value={addForm.product_name} onChange={e => {
+            const sel = products.find(p => p.name === e.target.value);
+            setAddForm({ ...addForm, product_name: e.target.value, amount: sel ? String(sel.price) : addForm.amount });
+          }} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surfaceBg, fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.deepInk, boxSizing: "border-box" }}>
+            <option value="">প্রোডাক্ট সিলেক্ট করুন</option>
+            {products.map(p => <option key={p.name} value={p.name}>{p.name} — ৳{p.price}</option>)}
+          </select>
+        </div>
+        <Input label="পরিমাণ (৳) *" value={addForm.amount} onChange={v => setAddForm({ ...addForm, amount: v })} type="number" placeholder="3500" />
+        <Input label="ডেলিভারি ঠিকানা *" value={addForm.address} onChange={v => setAddForm({ ...addForm, address: v })} placeholder="বাড়ি নং, এলাকা, জেলা" />
+        <Input label="ডেলিভারি চার্জ (৳)" value={addForm.delivery_charge} onChange={v => setAddForm({ ...addForm, delivery_charge: v })} type="number" placeholder="70" />
+        {addForm.amount && <div style={{ fontFamily: "'DM Sans'", fontSize: 13, fontWeight: 600, color: C.deepInk, marginBottom: 12 }}>মোট: ৳{(parseFloat(addForm.amount || "0") + parseFloat(addForm.delivery_charge || "0")).toLocaleString()}</div>}
+        <Btn onClick={addOrder} disabled={saving || !addForm.customer_name || !addForm.amount || !addForm.phone} style={{ width: "100%" }}>{saving ? "সেভ হচ্ছে..." : "অর্ডার যোগ করুন"}</Btn>
       </Modal>
     </div>
   );
