@@ -291,13 +291,15 @@ function OrdersPage({ sellerId }: { sellerId: string }) {
 
   async function updateStatus(id: string, status: string) {
     try {
-      await fetch("https://damkoto-backend-production.up.railway.app/api/orders/" + id + "/status", {
+      const res = await fetch(`https://damkoto-backend-production.up.railway.app/api/orders/${id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
+      const data = await res.json();
+      if (!data.success) console.error("Status update failed:", data.error);
     } catch (e) {
-      // Fallback to direct Supabase if backend is unreachable
+      console.error("Status update error:", e);
       await supabase.from("orders").update({ status }).eq("id", id);
     }
     fetchOrders();
@@ -696,13 +698,15 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
   const [stats, setStats] = useState({ orders: 0, revenue: 0, pending: 0, customers: 0, products: 0, messages: 0 });
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
+  const [systemAlerts, setSystemAlerts] = useState<any[]>([]);
 
   useEffect(() => { (async () => {
-    const [ordersRes, customersRes, productsRes, messagesRes] = await Promise.all([
+    const [ordersRes, customersRes, productsRes, messagesRes, alertsRes] = await Promise.all([
       supabase.from("orders").select("*").eq("seller_id", sellerId),
       supabase.from("customers").select("id").eq("seller_id", sellerId),
       supabase.from("products").select("*").eq("seller_id", sellerId),
       supabase.from("messages").select("*").eq("seller_id", sellerId).order("created_at", { ascending: false }).limit(5),
+      supabase.from("messages").select("*").eq("seller_id", sellerId).eq("direction", "system").order("created_at", { ascending: false }).limit(5),
     ]);
     const orders = ordersRes.data || [];
     const revenue = orders.reduce((sum: number, o: any) => sum + (o.amount || 0), 0);
@@ -710,10 +714,33 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
     setStats({ orders: orders.length, revenue, pending, customers: (customersRes.data || []).length, products: (productsRes.data || []).length, messages: (messagesRes.data || []).length });
     setTopProducts((productsRes.data || []).slice(0, 3));
     setRecentMessages(messagesRes.data || []);
+    setSystemAlerts(alertsRes.data || []);
   })(); }, [sellerId]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: mobile ? 10 : 16 }}>
+      {/* Attention Alerts */}
+      {systemAlerts.length > 0 && (
+        <Card style={{ padding: mobile ? 14 : 20, borderLeft: `3px solid ${C.vermillion}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 600, color: C.vermillion }}>⚠️ মনোযোগ দরকার</span>
+            <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textMuted }}>{systemAlerts.length}টি</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {systemAlerts.map((a, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 10, background: C.redSoft, borderRadius: 8 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 14, background: C.vermillionLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: C.vermillion, flexShrink: 0 }}>!</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, fontWeight: 600, color: C.deepInk }}>{a.customer_name || "অজানা কাস্টমার"}</div>
+                  <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textSecondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.content}</div>
+                </div>
+                <button onClick={() => setPage("messages")} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.cardBg, fontFamily: "'Tiro Bangla', serif", fontSize: 10, cursor: "pointer", color: C.vermillion, whiteSpace: "nowrap", flexShrink: 0 }}>মেসেজে যান</button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Summary + Pipeline: side by side on desktop, stacked on mobile */}
       <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "1fr 1fr 1fr", gap: mobile ? 10 : 16 }}>
         <Card style={{ padding: mobile ? 14 : 20 }}>
@@ -1334,6 +1361,7 @@ export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
+  const [systemAlertCount, setSystemAlertCount] = useState(0);
 
   useEffect(() => {
     const sid = localStorage.getItem("damkoto_seller_id");
@@ -1345,6 +1373,10 @@ export default function DashboardPage() {
       supabase.from("shop_settings").select("id").eq("seller_id", sid).single().then(({ data }) => {
         if (!data) setShowOnboarding(true);
         setCheckingOnboarding(false);
+      });
+      // Check system alerts count
+      supabase.from("messages").select("id", { count: "exact", head: true }).eq("seller_id", sid).eq("direction", "system").then(({ count }) => {
+        setSystemAlertCount(count || 0);
       });
     } else {
       setNotConnected(true);
@@ -1418,7 +1450,12 @@ export default function DashboardPage() {
         <nav style={{ flex: 1, padding: "4px 8px", overflowY: "auto" }}>
           {navItems.map(item => {
             const active = activePage === item.id;
-            return <button key={item.id} onClick={() => navigateTo(item.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: "none", background: active ? C.vermillionLight : "transparent", color: active ? C.vermillion : C.textSecondary, cursor: "pointer", fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: active ? 600 : 400, marginBottom: 2, transition: "all 0.15s" }}><NavIcon type={item.icon} active={active} />{item.label}</button>;
+            const hasAlert = item.id === "messages" && systemAlertCount > 0;
+            return <button key={item.id} onClick={() => navigateTo(item.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: "none", background: active ? C.vermillionLight : "transparent", color: active ? C.vermillion : C.textSecondary, cursor: "pointer", fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: active ? 600 : 400, marginBottom: 2, transition: "all 0.15s", position: "relative" }}>
+              <NavIcon type={item.icon} active={active} />
+              {item.label}
+              {hasAlert && <span style={{ width: 7, height: 7, borderRadius: 4, background: C.vermillion, display: "inline-block", marginLeft: "auto", flexShrink: 0 }} />}
+            </button>;
           })}
         </nav>
         <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.border}` }}>
