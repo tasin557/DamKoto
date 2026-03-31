@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 
 const C = {
@@ -599,39 +599,106 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
+  const msgEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { (async () => {
-    const { data } = await supabase.from("messages").select("*").eq("seller_id", sellerId).order("created_at", { ascending: false }).limit(100);
+  const fetchMessages = useCallback(async () => {
+    const { data } = await supabase.from("messages").select("*").eq("seller_id", sellerId).neq("direction", "ai_paused").order("created_at", { ascending: false }).limit(200);
     setMessages(data || []); setLoading(false);
-  })(); }, [sellerId]);
+  }, [sellerId]);
+
+  useEffect(() => { fetchMessages(); }, [fetchMessages]);
+
+  // Auto-scroll to bottom when messages change or conversation selected
+  useEffect(() => { setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100); }, [selected, messages.length]);
 
   const grouped: Record<string, any[]> = {};
   messages.forEach(m => { const key = m.customer_name || m.facebook_user_id || "unknown"; if (!grouped[key]) grouped[key] = []; grouped[key].push(m); });
-  const conversations = Object.entries(grouped).map(([name, msgs]) => ({ name, msgs, last: msgs[0] }));
+  const conversations = Object.entries(grouped).map(([name, msgs]) => ({ name, msgs, last: msgs[0], customerId: msgs[0]?.customer_id }));
+  const selectedConvo = conversations.find(c => c.name === selected);
   const selectedMsgs = selected ? (grouped[selected] || []).reverse() : [];
+  const selectedCustomerId = selectedConvo?.customerId;
+
+  async function sendReply() {
+    if (!replyText.trim() || !selectedCustomerId || sending) return;
+    const text = replyText.trim();
+    setSending(true);
+    setReplyText("");
+
+    // Optimistic update
+    const optimistic = { id: "temp-" + Date.now(), seller_id: sellerId, customer_id: selectedCustomerId, customer_name: selected, direction: "seller_reply", content: text, created_at: new Date().toISOString() };
+    setMessages(prev => [optimistic, ...prev]);
+
+    try {
+      await fetch("https://damkoto-backend-production.up.railway.app/api/messages/reply", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_id: selectedCustomerId, seller_id: sellerId, message: text }),
+      });
+      fetchMessages(); // refresh with real data
+    } catch (e) { console.error("Reply failed:", e); }
+    setSending(false);
+  }
+
+  function getMsgStyle(direction: string) {
+    if (direction === "outgoing") return { bg: C.vermillionLight, align: "flex-end" as const, badge: "⚡ AI", badgeBg: C.vermillionLight, badgeColor: C.vermillion };
+    if (direction === "seller_reply") return { bg: "#E3F2FD", align: "flex-end" as const, badge: "👤 সেলার", badgeBg: "#E3F2FD", badgeColor: "#1565C0" };
+    if (direction === "system") return { bg: "#FFF8E1", align: "center" as const, badge: "⚠️", badgeBg: "#FFF8E1", badgeColor: "#F57F17" };
+    return { bg: C.cardBg, align: "flex-start" as const, badge: "", badgeBg: "", badgeColor: "" };
+  }
+
+  function MessageBubble({ m }: { m: any }) {
+    const s = getMsgStyle(m.direction);
+    if (m.direction === "system") {
+      return (
+        <div style={{ padding: "6px 14px", background: s.bg, borderRadius: 8, border: "1px solid #F5A623", textAlign: "center" }}>
+          <p style={{ margin: 0, fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: "#F57F17" }}>{m.content}</p>
+        </div>
+      );
+    }
+    return (
+      <div style={{ display: "flex", justifyContent: s.align }}>
+        <div style={{ maxWidth: mobile ? "85%" : "70%", padding: "8px 14px", borderRadius: 12, background: s.bg, border: `1px solid ${C.border}` }}>
+          <p style={{ margin: 0, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk, wordBreak: "break-word" }}>{m.content}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+            <span style={{ fontSize: 10, color: C.textMuted }}>{m.created_at ? new Date(m.created_at).toLocaleTimeString("bn-BD", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
+            {s.badge && <span style={{ fontSize: 9, background: s.badgeBg, color: s.badgeColor, padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>{s.badge}</span>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function ReplyBar() {
+    if (!selected || !selectedCustomerId) return null;
+    return (
+      <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}`, background: C.cardBg, display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+        <input value={replyText} onChange={e => setReplyText(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendReply(); } }}
+          placeholder="মেসেজ লিখুন..."
+          style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.deepInk, outline: "none", background: C.surfaceBg }} />
+        <button onClick={sendReply} disabled={!replyText.trim() || sending}
+          style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: C.vermillion, color: "#fff", fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: (!replyText.trim() || sending) ? 0.5 : 1, flexShrink: 0 }}>
+          {sending ? "..." : "পাঠান"}
+        </button>
+      </div>
+    );
+  }
 
   // Mobile: show list or conversation
   if (mobile) {
     if (selected) {
       return (
         <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 130px)" }}>
-          <div style={{ padding: 12, borderBottom: `1px solid ${C.border}`, background: C.cardBg, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ padding: 12, borderBottom: `1px solid ${C.border}`, background: C.cardBg, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: C.textMuted, padding: 4 }}>←</button>
             <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 600, color: C.deepInk }}>{selected}</span>
           </div>
-          <div style={{ flex: 1, overflow: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 8, background: C.surfaceBg }}>
-            {selectedMsgs.map((m, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: m.direction === "outgoing" ? "flex-end" : "flex-start" }}>
-                <div style={{ maxWidth: "80%", padding: "8px 12px", borderRadius: 12, background: m.direction === "outgoing" ? C.vermillionLight : C.cardBg, border: `1px solid ${C.border}` }}>
-                  <p style={{ margin: 0, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>{m.content}</p>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-                    <span style={{ fontSize: 10, color: C.textMuted }}>{new Date(m.created_at).toLocaleTimeString("bn-BD", { hour: "2-digit", minute: "2-digit" })}</span>
-                    {m.direction === "outgoing" && <span style={{ fontSize: 9, background: C.vermillionLight, color: C.vermillion, padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>⚡ AI</span>}
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 8, background: C.surfaceBg }}>
+            {selectedMsgs.map((m, i) => <MessageBubble key={m.id || i} m={m} />)}
+            <div ref={msgEndRef} />
           </div>
+          <ReplyBar />
         </div>
       );
     }
@@ -640,12 +707,18 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
         {loading ? <p style={{ textAlign: "center", color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>লোড হচ্ছে...</p> :
           conversations.length === 0 ? <Card><EmptyState icon="💬" title="কোনো মেসেজ নেই" subtitle="নতুন মেসেজ এখানে দেখাবে" /></Card> :
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            {conversations.map(c => (
-              <div key={c.name} onClick={() => setSelected(c.name)} style={{ padding: 14, background: C.cardBg, borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
-                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 500, color: C.deepInk }}>{c.name}</div>
-                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.last.content}</div>
-              </div>
-            ))}
+            {conversations.map(c => {
+              const hasSystem = c.msgs.some(m => m.direction === "system");
+              return (
+                <div key={c.name} onClick={() => setSelected(c.name)} style={{ padding: 14, background: C.cardBg, borderBottom: `1px solid ${C.border}`, cursor: "pointer", borderLeft: hasSystem ? `3px solid #F5A623` : "none" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 500, color: C.deepInk }}>{c.name}</span>
+                    {hasSystem && <span style={{ fontSize: 10, color: "#F57F17" }}>⚠️</span>}
+                  </div>
+                  <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.last.content}</div>
+                </div>
+              );
+            })}
           </div>
         }
       </div>
@@ -654,39 +727,39 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
 
   // Desktop: split panel
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 0, height: "calc(100vh - 130px)", border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 0, height: "calc(100vh - 130px)", border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
       <div style={{ background: C.cardBg, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: 16, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ padding: 14, borderBottom: `1px solid ${C.border}` }}>
           <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textMuted }}>কথোপকথন ({conversations.length})</span>
         </div>
-        <div style={{ flex: 1, overflow: "auto" }}>
+        <div style={{ flex: 1, overflowY: "auto" }}>
           {loading ? <p style={{ padding: 16, color: C.textMuted, fontFamily: "'Tiro Bangla', serif", fontSize: 13 }}>লোড হচ্ছে...</p> :
             conversations.length === 0 ? <EmptyState icon="💬" title="কোনো মেসেজ নেই" subtitle="নতুন মেসেজ এখানে দেখাবে" /> :
-            conversations.map(c => (
-              <div key={c.name} onClick={() => setSelected(c.name)} style={{ padding: "12px 16px", borderBottom: `1px solid ${C.border}`, cursor: "pointer", background: selected === c.name ? C.vermillionLight : "transparent" }}>
-                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 500, color: C.deepInk }}>{c.name}</div>
-                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.last.content}</div>
-              </div>
-            ))
+            conversations.map(c => {
+              const hasSystem = c.msgs.some(m => m.direction === "system");
+              return (
+                <div key={c.name} onClick={() => setSelected(c.name)} style={{ padding: "12px 14px", borderBottom: `1px solid ${C.border}`, cursor: "pointer", background: selected === c.name ? C.vermillionLight : "transparent", borderLeft: hasSystem ? `3px solid #F5A623` : "none" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 500, color: C.deepInk }}>{c.name}</span>
+                    {hasSystem && <span style={{ fontSize: 10, color: "#F57F17" }}>⚠️</span>}
+                  </div>
+                  <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.last.content}</div>
+                </div>
+              );
+            })
           }
         </div>
       </div>
       <div style={{ background: C.surfaceBg, display: "flex", flexDirection: "column" }}>
-        {!selected ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}><EmptyState icon="💬" title="একটি মেসেজ সিলেক্ট করুন" subtitle="বাম দিক থেকে সিলেক্ট করুন" /></div> :
-          <div style={{ flex: 1, overflow: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-            {selectedMsgs.map((m, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: m.direction === "outgoing" ? "flex-end" : "flex-start" }}>
-                <div style={{ maxWidth: "70%", padding: "8px 14px", borderRadius: 12, background: m.direction === "outgoing" ? C.vermillionLight : C.cardBg, border: `1px solid ${C.border}` }}>
-                  <p style={{ margin: 0, fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.deepInk }}>{m.content}</p>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-                    <span style={{ fontSize: 10, color: C.textMuted }}>{new Date(m.created_at).toLocaleTimeString("bn-BD", { hour: "2-digit", minute: "2-digit" })}</span>
-                    {m.direction === "outgoing" && <span style={{ fontSize: 9, background: C.vermillionLight, color: C.vermillion, padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>⚡ AI</span>}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        }
+        {!selected ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}><EmptyState icon="💬" title="একটি মেসেজ সিলেক্ট করুন" subtitle="বাম দিক থেকে সিলেক্ট করুন" /></div> : (
+          <>
+            <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+              {selectedMsgs.map((m, i) => <MessageBubble key={m.id || i} m={m} />)}
+              <div ref={msgEndRef} />
+            </div>
+            <ReplyBar />
+          </>
+        )}
       </div>
     </div>
   );
@@ -695,7 +768,7 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
 // ============ DASHBOARD HOME ============
 function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: string) => void }) {
   const mobile = useIsMobile();
-  const [stats, setStats] = useState({ orders: 0, revenue: 0, pending: 0, customers: 0, products: 0, messages: 0 });
+  const [stats, setStats] = useState({ orders: 0, revenue: 0, pending: 0, customers: 0, products: 0, messages: 0, byStatus: {} as Record<string, number> });
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
   const [systemAlerts, setSystemAlerts] = useState<any[]>([]);
@@ -711,7 +784,9 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
     const orders = ordersRes.data || [];
     const revenue = orders.reduce((sum: number, o: any) => sum + (o.amount || 0), 0);
     const pending = orders.filter((o: any) => o.status === "new").length;
-    setStats({ orders: orders.length, revenue, pending, customers: (customersRes.data || []).length, products: (productsRes.data || []).length, messages: (messagesRes.data || []).length });
+    const byStatus: Record<string, number> = {};
+    ["new", "confirmed", "paid", "shipped", "delivered", "cancelled"].forEach(s => { byStatus[s] = orders.filter((o: any) => o.status === s).length; });
+    setStats({ orders: orders.length, revenue, pending, customers: (customersRes.data || []).length, products: (productsRes.data || []).length, messages: (messagesRes.data || []).length, byStatus });
     setTopProducts((productsRes.data || []).slice(0, 3));
     setRecentMessages(messagesRes.data || []);
     setSystemAlerts(alertsRes.data || []);
@@ -756,8 +831,8 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
         <Card style={{ padding: mobile ? 14 : 20 }}>
           <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, color: C.textSecondary, marginBottom: 10 }}>অর্ডার পাইপলাইন</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {[{ label: "নতুন", bg: C.redSoft, color: C.vermillion }, { label: "কনফার্ম", bg: C.blueSoft, color: C.blueText }, { label: "পেমেন্ট", bg: C.purpleSoft, color: C.purpleText }, { label: "শিপড", bg: C.yellowSoft, color: C.yellowText }, { label: "ডেলিভার্ড", bg: C.greenSoft, color: C.greenText }].map(p => (
-              <span key={p.label} style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontFamily: "'Tiro Bangla', serif", background: p.bg, color: p.color, fontWeight: 500 }}>{p.label}</span>
+            {[{ label: "নতুন", key: "new", bg: C.redSoft, color: C.vermillion }, { label: "কনফার্ম", key: "confirmed", bg: C.blueSoft, color: C.blueText }, { label: "পেমেন্ট", key: "paid", bg: C.purpleSoft, color: C.purpleText }, { label: "শিপড", key: "shipped", bg: C.yellowSoft, color: C.yellowText }, { label: "ডেলিভার্ড", key: "delivered", bg: C.greenSoft, color: C.greenText }].map(p => (
+              <span key={p.key} style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontFamily: "'Tiro Bangla', serif", background: p.bg, color: p.color, fontWeight: 500 }}>{p.label} {stats.byStatus[p.key] || 0}</span>
             ))}
           </div>
         </Card>
