@@ -597,48 +597,52 @@ function CustomersPage({ sellerId }: { sellerId: string }) {
 function MessagesPage({ sellerId }: { sellerId: string }) {
   const mobile = useIsMobile();
   const [messages, setMessages] = useState<any[]>([]);
+  const [customerMap, setCustomerMap] = useState<Record<string, { name: string; facebook_user_id: string }>>({});
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState("");
-  const [sending, setSending] = useState(false);
   const msgEndRef = useRef<HTMLDivElement>(null);
 
-  const fetchMessages = useCallback(async () => {
-    const { data } = await supabase.from("messages").select("*").eq("seller_id", sellerId).neq("direction", "ai_paused").order("created_at", { ascending: false }).limit(200);
-    setMessages(data || []); setLoading(false);
+  const fetchData = useCallback(async () => {
+    const [msgRes, custRes] = await Promise.all([
+      supabase.from("messages").select("*").eq("seller_id", sellerId)
+        .neq("direction", "ai_paused")
+        .order("created_at", { ascending: false }).limit(200),
+      supabase.from("customers").select("id, name, facebook_user_id").eq("seller_id", sellerId),
+    ]);
+    const cMap: Record<string, { name: string; facebook_user_id: string }> = {};
+    (custRes.data || []).forEach((c: any) => {
+      cMap[c.id] = { name: c.name || "অজানা", facebook_user_id: c.facebook_user_id || "" };
+    });
+    setCustomerMap(cMap);
+    setMessages(msgRes.data || []);
+    setLoading(false);
   }, [sellerId]);
 
-  useEffect(() => { fetchMessages(); }, [fetchMessages]);
-
-  // Auto-scroll to bottom when messages change or conversation selected
+  useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100); }, [selected, messages.length]);
 
+  // Group by customer_id (correct column)
   const grouped: Record<string, any[]> = {};
-  messages.forEach(m => { const key = m.customer_name || m.facebook_user_id || "unknown"; if (!grouped[key]) grouped[key] = []; grouped[key].push(m); });
-  const conversations = Object.entries(grouped).map(([name, msgs]) => ({ name, msgs, last: msgs[0], customerId: msgs[0]?.customer_id }));
-  const selectedConvo = conversations.find(c => c.name === selected);
-  const selectedMsgs = selected ? (grouped[selected] || []).reverse() : [];
-  const selectedCustomerId = selectedConvo?.customerId;
+  messages.forEach(m => {
+    const key = m.customer_id || "unknown";
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(m);
+  });
 
-  async function sendReply() {
-    if (!replyText.trim() || !selectedCustomerId || sending) return;
-    const text = replyText.trim();
-    setSending(true);
-    setReplyText("");
+  const conversations = Object.entries(grouped).map(([customerId, msgs]) => ({
+    customerId,
+    name: customerMap[customerId]?.name || "অজানা",
+    facebookId: customerMap[customerId]?.facebook_user_id || "",
+    msgs,
+    last: msgs[0],
+    lastTime: msgs[0]?.created_at,
+    hasAlert: msgs.some(m => m.direction === "system"),
+  })).sort((a, b) => (b.lastTime || "").localeCompare(a.lastTime || ""));
 
-    // Optimistic update
-    const optimistic = { id: "temp-" + Date.now(), seller_id: sellerId, customer_id: selectedCustomerId, customer_name: selected, direction: "seller_reply", content: text, created_at: new Date().toISOString() };
-    setMessages(prev => [optimistic, ...prev]);
-
-    try {
-      await fetch("https://damkoto-backend-production.up.railway.app/api/messages/reply", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer_id: selectedCustomerId, seller_id: sellerId, message: text }),
-      });
-      fetchMessages(); // refresh with real data
-    } catch (e) { console.error("Reply failed:", e); }
-    setSending(false);
-  }
+  const selectedConvo = conversations.find(c => c.customerId === selected);
+  const selectedMsgs = selected ? (grouped[selected] || []).slice().reverse() : [];
+  const selectedName = selectedConvo?.name || "";
+  const selectedFbId = selectedConvo?.facebookId || "";
 
   function getMsgStyle(direction: string) {
     if (direction === "outgoing") return { bg: C.vermillionLight, align: "flex-end" as const, badge: "⚡ AI", badgeBg: C.vermillionLight, badgeColor: C.vermillion };
@@ -669,36 +673,67 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
     );
   }
 
-  function ReplyBar() {
-    if (!selected || !selectedCustomerId) return null;
+  function ActionBar() {
+    if (!selected || !selectedFbId) return null;
+    const hasAlert = selectedConvo?.hasAlert || false;
+
+    async function resumeAI() {
+      try {
+        await fetch("https://damkoto-backend-production.up.railway.app/api/messages/resume-ai", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ customer_id: selected }),
+        });
+        fetchData();
+      } catch (e) { console.error("Resume AI failed:", e); }
+    }
+
     return (
-      <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}`, background: C.cardBg, display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-        <input value={replyText} onChange={e => setReplyText(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendReply(); } }}
-          placeholder="মেসেজ লিখুন..."
-          style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: `1px solid ${C.border}`, fontFamily: "'Tiro Bangla', serif", fontSize: 14, color: C.deepInk, outline: "none", background: C.surfaceBg }} />
-        <button onClick={sendReply} disabled={!replyText.trim() || sending}
-          style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: C.vermillion, color: "#fff", fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: (!replyText.trim() || sending) ? 0.5 : 1, flexShrink: 0 }}>
-          {sending ? "..." : "পাঠান"}
-        </button>
+      <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        {hasAlert && (
+          <div style={{ padding: "8px 14px", background: "#FFF3CD", borderTop: "1px solid #F5A623", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 16 }}>🤖</span>
+              <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: "#856404", fontWeight: 500 }}>AI বন্ধ আছে — মেসেঞ্জারে রিপ্লাই দিন</span>
+            </div>
+            <button onClick={resumeAI} style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.vermillion}`, background: "transparent", color: C.vermillion, fontFamily: "'Tiro Bangla', serif", fontSize: 11, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+              🤖 AI চালু করুন
+            </button>
+          </div>
+        )}
+        <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}`, background: C.cardBg, display: "flex", gap: 8, alignItems: "center" }}>
+          <a href={`https://m.me/${selectedFbId}`} target="_blank" rel="noopener noreferrer"
+            style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 16px", borderRadius: 8, background: "#0084FF", color: "#fff", fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
+            💬 মেসেঞ্জারে যোগাযোগ করুন
+          </a>
+        </div>
       </div>
     );
   }
 
-  // Mobile: show list or conversation
+  function ConvoHeader() {
+    if (!selected) return null;
+    const hasAlert = selectedConvo?.hasAlert || false;
+    return (
+      <div style={{ padding: "10px 16px", borderBottom: `1px solid ${C.border}`, background: C.cardBg, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {mobile && <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: C.textMuted, padding: 4 }}>←</button>}
+          <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 600, color: C.deepInk }}>{selectedName}</span>
+          {hasAlert && <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 10, background: "#FFF8E1", color: "#F57F17", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>মনোযোগ দরকার</span>}
+        </div>
+      </div>
+    );
+  }
+
   if (mobile) {
     if (selected) {
       return (
         <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 130px)" }}>
-          <div style={{ padding: 12, borderBottom: `1px solid ${C.border}`, background: C.cardBg, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: C.textMuted, padding: 4 }}>←</button>
-            <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 600, color: C.deepInk }}>{selected}</span>
-          </div>
+          <ConvoHeader />
           <div style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 8, background: C.surfaceBg }}>
             {selectedMsgs.map((m, i) => <MessageBubble key={m.id || i} m={m} />)}
             <div ref={msgEndRef} />
           </div>
-          <ReplyBar />
+          <ActionBar />
         </div>
       );
     }
@@ -707,25 +742,24 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
         {loading ? <p style={{ textAlign: "center", color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>লোড হচ্ছে...</p> :
           conversations.length === 0 ? <Card><EmptyState icon="💬" title="কোনো মেসেজ নেই" subtitle="নতুন মেসেজ এখানে দেখাবে" /></Card> :
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            {conversations.map(c => {
-              const hasSystem = c.msgs.some(m => m.direction === "system");
-              return (
-                <div key={c.name} onClick={() => setSelected(c.name)} style={{ padding: 14, background: C.cardBg, borderBottom: `1px solid ${C.border}`, cursor: "pointer", borderLeft: hasSystem ? `3px solid #F5A623` : "none" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 500, color: C.deepInk }}>{c.name}</span>
-                    {hasSystem && <span style={{ fontSize: 10, color: "#F57F17" }}>⚠️</span>}
+            {conversations.map(c => (
+              <div key={c.customerId} onClick={() => setSelected(c.customerId)} style={{ padding: 14, background: C.cardBg, borderBottom: `1px solid ${C.border}`, cursor: "pointer", borderLeft: c.hasAlert ? "3px solid #F5A623" : "none" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 500, color: C.deepInk }}>{c.name}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {c.hasAlert && <span style={{ fontSize: 10, color: "#F57F17" }}>⚠️</span>}
+                    <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Sans', sans-serif" }}>{c.lastTime ? new Date(c.lastTime).toLocaleDateString("bn-BD") : ""}</span>
                   </div>
-                  <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.last.content}</div>
                 </div>
-              );
-            })}
+                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{c.last.content}</div>
+              </div>
+            ))}
           </div>
         }
       </div>
     );
   }
 
-  // Desktop: split panel
   return (
     <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 0, height: "calc(100vh - 130px)", border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
       <div style={{ background: C.cardBg, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column" }}>
@@ -735,35 +769,41 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
         <div style={{ flex: 1, overflowY: "auto" }}>
           {loading ? <p style={{ padding: 16, color: C.textMuted, fontFamily: "'Tiro Bangla', serif", fontSize: 13 }}>লোড হচ্ছে...</p> :
             conversations.length === 0 ? <EmptyState icon="💬" title="কোনো মেসেজ নেই" subtitle="নতুন মেসেজ এখানে দেখাবে" /> :
-            conversations.map(c => {
-              const hasSystem = c.msgs.some(m => m.direction === "system");
-              return (
-                <div key={c.name} onClick={() => setSelected(c.name)} style={{ padding: "12px 14px", borderBottom: `1px solid ${C.border}`, cursor: "pointer", background: selected === c.name ? C.vermillionLight : "transparent", borderLeft: hasSystem ? `3px solid #F5A623` : "none" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 500, color: C.deepInk }}>{c.name}</span>
-                    {hasSystem && <span style={{ fontSize: 10, color: "#F57F17" }}>⚠️</span>}
+            conversations.map(c => (
+              <div key={c.customerId} onClick={() => setSelected(c.customerId)} style={{ padding: "12px 14px", borderBottom: `1px solid ${C.border}`, cursor: "pointer", background: selected === c.customerId ? C.vermillionLight : c.hasAlert ? "#FFFBF0" : "transparent", borderLeft: c.hasAlert ? "3px solid #F5A623" : "none" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 500, color: C.deepInk }}>{c.name}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {c.hasAlert && <span style={{ fontSize: 8, padding: "2px 6px", borderRadius: 4, background: "#FFF3CD", color: "#856404", fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>AI বন্ধ</span>}
+                    <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Sans', sans-serif" }}>{c.lastTime ? new Date(c.lastTime).toLocaleDateString("bn-BD") : ""}</span>
                   </div>
-                  <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.last.content}</div>
                 </div>
-              );
-            })
+                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{c.last.content}</div>
+              </div>
+            ))
           }
         </div>
       </div>
       <div style={{ background: C.surfaceBg, display: "flex", flexDirection: "column" }}>
-        {!selected ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}><EmptyState icon="💬" title="একটি মেসেজ সিলেক্ট করুন" subtitle="বাম দিক থেকে সিলেক্ট করুন" /></div> : (
+        {!selected ? (
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <EmptyState icon="💬" title="একটি মেসেজ সিলেক্ট করুন" subtitle="বাম দিক থেকে সিলেক্ট করুন" />
+          </div>
+        ) : (
           <>
+            <ConvoHeader />
             <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
               {selectedMsgs.map((m, i) => <MessageBubble key={m.id || i} m={m} />)}
               <div ref={msgEndRef} />
             </div>
-            <ReplyBar />
+            <ActionBar />
           </>
         )}
       </div>
     </div>
   );
 }
+
 
 // ============ DASHBOARD HOME ============
 function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: string) => void }) {
@@ -776,20 +816,26 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
   useEffect(() => { (async () => {
     const [ordersRes, customersRes, productsRes, messagesRes, alertsRes] = await Promise.all([
       supabase.from("orders").select("*").eq("seller_id", sellerId),
-      supabase.from("customers").select("id").eq("seller_id", sellerId),
+      supabase.from("customers").select("id, name").eq("seller_id", sellerId),
       supabase.from("products").select("*").eq("seller_id", sellerId),
-      supabase.from("messages").select("*").eq("seller_id", sellerId).order("created_at", { ascending: false }).limit(5),
+      supabase.from("messages").select("*").eq("seller_id", sellerId).neq("direction", "ai_paused").order("created_at", { ascending: false }).limit(5),
       supabase.from("messages").select("*").eq("seller_id", sellerId).eq("direction", "system").order("created_at", { ascending: false }).limit(5),
     ]);
     const orders = ordersRes.data || [];
+    const customers = customersRes.data || [];
+    const custMap: Record<string, string> = {};
+    customers.forEach((c: any) => { custMap[c.id] = c.name || "অজানা"; });
     const revenue = orders.reduce((sum: number, o: any) => sum + (o.amount || 0), 0);
     const pending = orders.filter((o: any) => o.status === "new").length;
     const byStatus: Record<string, number> = {};
     ["new", "confirmed", "paid", "shipped", "delivered", "cancelled"].forEach(s => { byStatus[s] = orders.filter((o: any) => o.status === s).length; });
-    setStats({ orders: orders.length, revenue, pending, customers: (customersRes.data || []).length, products: (productsRes.data || []).length, messages: (messagesRes.data || []).length, byStatus });
+    setStats({ orders: orders.length, revenue, pending, customers: customers.length, products: (productsRes.data || []).length, messages: (messagesRes.data || []).length, byStatus });
     setTopProducts((productsRes.data || []).slice(0, 3));
-    setRecentMessages(messagesRes.data || []);
-    setSystemAlerts(alertsRes.data || []);
+    // Attach customer names to recent messages and alerts
+    const msgWithNames = (messagesRes.data || []).map((m: any) => ({ ...m, _customerName: custMap[m.customer_id] || "অজানা" }));
+    const alertsWithNames = (alertsRes.data || []).map((m: any) => ({ ...m, _customerName: custMap[m.customer_id] || "অজানা" }));
+    setRecentMessages(msgWithNames);
+    setSystemAlerts(alertsWithNames);
   })(); }, [sellerId]);
 
   return (
@@ -806,7 +852,7 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
               <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 10, background: C.redSoft, borderRadius: 8 }}>
                 <div style={{ width: 28, height: 28, borderRadius: 14, background: C.vermillionLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: C.vermillion, flexShrink: 0 }}>!</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, fontWeight: 600, color: C.deepInk }}>{a.customer_name || "অজানা কাস্টমার"}</div>
+                  <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, fontWeight: 600, color: C.deepInk }}>{a._customerName}</div>
                   <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textSecondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.content}</div>
                 </div>
                 <button onClick={() => setPage("messages")} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.cardBg, fontFamily: "'Tiro Bangla', serif", fontSize: 10, cursor: "pointer", color: C.vermillion, whiteSpace: "nowrap", flexShrink: 0 }}>মেসেজে যান</button>
@@ -846,9 +892,9 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {recentMessages.slice(0, 3).map((m, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 14, background: C.saffronLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: C.saffron, flexShrink: 0 }}>{(m.customer_name || "?")[0]}</div>
+                    <div style={{ width: 28, height: 28, borderRadius: 14, background: C.saffronLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: C.saffron, flexShrink: 0 }}>{(m._customerName || "?")[0]}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.deepInk, fontWeight: 500 }}>{m.customer_name || "অজানা"}</div>
+                      <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.deepInk, fontWeight: 500 }}>{m._customerName || "অজানা"}</div>
                       <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.content}</div>
                     </div>
                   </div>
@@ -870,9 +916,9 @@ function DashboardHome({ sellerId, setPage }: { sellerId: string; setPage: (p: s
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {recentMessages.slice(0, 3).map((m, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 14, background: C.saffronLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: C.saffron, flexShrink: 0 }}>{(m.customer_name || "?")[0]}</div>
+                  <div style={{ width: 28, height: 28, borderRadius: 14, background: C.saffronLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: C.saffron, flexShrink: 0 }}>{(m._customerName || "?")[0]}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.deepInk, fontWeight: 500 }}>{m.customer_name || "অজানা"}</div>
+                    <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.deepInk, fontWeight: 500 }}>{m._customerName || "অজানা"}</div>
                     <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.content}</div>
                   </div>
                 </div>
