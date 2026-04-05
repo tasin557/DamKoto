@@ -601,12 +601,12 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const msgEndRef = useRef<HTMLDivElement>(null);
+  const PAGE_ASSET_ID = "1139469812572135";
 
   const fetchData = useCallback(async () => {
     const [msgRes, custRes] = await Promise.all([
       supabase.from("messages").select("*").eq("seller_id", sellerId)
-        .neq("direction", "ai_paused")
-        .order("created_at", { ascending: false }).limit(200),
+        .order("created_at", { ascending: false }).limit(300),
       supabase.from("customers").select("id, name, facebook_user_id").eq("seller_id", sellerId),
     ]);
     const cMap: Record<string, { name: string; facebook_user_id: string }> = {};
@@ -621,7 +621,10 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100); }, [selected, messages.length]);
 
-  // Group by customer_id (correct column)
+  // Internal directions that should not be shown in conversation bubbles
+  const hiddenDirections = ["ai_paused", "ai_resumed"];
+
+  // Group by customer_id
   const grouped: Record<string, any[]> = {};
   messages.forEach(m => {
     const key = m.customer_id || "unknown";
@@ -629,20 +632,39 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
     grouped[key].push(m);
   });
 
+  // Check AI pause status per customer: find latest ai_paused or ai_resumed
+  function isAIPaused(msgs: any[]): boolean {
+    for (const m of msgs) { // msgs are sorted newest first
+      if (m.direction === "ai_resumed") return false;
+      if (m.direction === "ai_paused") return true;
+    }
+    return false;
+  }
+
   const conversations = Object.entries(grouped).map(([customerId, msgs]) => ({
     customerId,
     name: customerMap[customerId]?.name || "অজানা",
     facebookId: customerMap[customerId]?.facebook_user_id || "",
     msgs,
-    last: msgs[0],
+    last: msgs.find(m => !hiddenDirections.includes(m.direction)) || msgs[0],
     lastTime: msgs[0]?.created_at,
+    aiPaused: isAIPaused(msgs),
     hasAlert: msgs.some(m => m.direction === "system"),
   })).sort((a, b) => (b.lastTime || "").localeCompare(a.lastTime || ""));
 
   const selectedConvo = conversations.find(c => c.customerId === selected);
-  const selectedMsgs = selected ? (grouped[selected] || []).slice().reverse() : [];
+  // Show messages in chronological order, filter out hidden directions
+  const selectedMsgs = selected
+    ? (grouped[selected] || []).filter(m => !hiddenDirections.includes(m.direction)).slice().reverse()
+    : [];
   const selectedName = selectedConvo?.name || "";
   const selectedFbId = selectedConvo?.facebookId || "";
+  const selectedAIPaused = selectedConvo?.aiPaused || false;
+
+  function getMessengerLink(fbId: string): string {
+    if (!fbId) return "#";
+    return `https://business.facebook.com/latest/inbox/all/?asset_id=${PAGE_ASSET_ID}&selected_item_id=${fbId}&thread_type=FB_MESSAGE`;
+  }
 
   function getMsgStyle(direction: string) {
     if (direction === "outgoing") return { bg: C.vermillionLight, align: "flex-end" as const, badge: "⚡ AI", badgeBg: C.vermillionLight, badgeColor: C.vermillion };
@@ -674,37 +696,50 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
   }
 
   function ActionBar() {
-    if (!selected || !selectedFbId) return null;
-    const hasAlert = selectedConvo?.hasAlert || false;
+    if (!selected) return null;
 
-    async function resumeAI() {
+    async function toggleAI() {
       try {
-        await fetch("https://damkoto-backend-production.up.railway.app/api/messages/resume-ai", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ customer_id: selected }),
-        });
-        fetchData();
-      } catch (e) { console.error("Resume AI failed:", e); }
+        const endpoint = selectedAIPaused ? "resume-ai" : "pause-ai";
+        // For pause, we use the pause_ai_for_customer via a new endpoint
+        if (selectedAIPaused) {
+          await fetch("https://damkoto-backend-production.up.railway.app/api/messages/resume-ai", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customer_id: selected }),
+          });
+        } else {
+          await fetch("https://damkoto-backend-production.up.railway.app/api/messages/pause-ai", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customer_id: selected }),
+          });
+        }
+        await fetchData();
+      } catch (e) { console.error("Toggle AI failed:", e); }
     }
 
     return (
       <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
-        {hasAlert && (
+        {selectedAIPaused && (
           <div style={{ padding: "8px 14px", background: "#FFF3CD", borderTop: "1px solid #F5A623", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 16 }}>🤖</span>
+              <span style={{ fontSize: 14 }}>🤖</span>
               <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: "#856404", fontWeight: 500 }}>AI বন্ধ আছে — মেসেঞ্জারে রিপ্লাই দিন</span>
             </div>
-            <button onClick={resumeAI} style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.vermillion}`, background: "transparent", color: C.vermillion, fontFamily: "'Tiro Bangla', serif", fontSize: 11, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-              🤖 AI চালু করুন
+            <button onClick={toggleAI} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #2E7D32", background: "#E8F5E9", color: "#2E7D32", fontFamily: "'Tiro Bangla', serif", fontSize: 11, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+              ✅ AI চালু করুন
             </button>
           </div>
         )}
         <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}`, background: C.cardBg, display: "flex", gap: 8, alignItems: "center" }}>
-          <a href={`https://m.me/${selectedFbId}`} target="_blank" rel="noopener noreferrer"
+          <a href={getMessengerLink(selectedFbId)} target="_blank" rel="noopener noreferrer"
             style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 16px", borderRadius: 8, background: "#0084FF", color: "#fff", fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
             💬 মেসেঞ্জারে যোগাযোগ করুন
           </a>
+          {!selectedAIPaused && (
+            <button onClick={toggleAI} style={{ padding: "10px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.cardBg, color: C.textMuted, fontFamily: "'Tiro Bangla', serif", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
+              🤖 AI বন্ধ করুন
+            </button>
+          )}
         </div>
       </div>
     );
@@ -712,14 +747,32 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
 
   function ConvoHeader() {
     if (!selected) return null;
-    const hasAlert = selectedConvo?.hasAlert || false;
     return (
       <div style={{ padding: "10px 16px", borderBottom: `1px solid ${C.border}`, background: C.cardBg, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {mobile && <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: C.textMuted, padding: 4 }}>←</button>}
           <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 600, color: C.deepInk }}>{selectedName}</span>
-          {hasAlert && <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 10, background: "#FFF8E1", color: "#F57F17", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>মনোযোগ দরকার</span>}
+          {selectedAIPaused && <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 10, background: "#FFF3CD", color: "#856404", fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>AI বন্ধ</span>}
         </div>
+      </div>
+    );
+  }
+
+  function ConvoListItem({ c }: { c: typeof conversations[0] }) {
+    return (
+      <div key={c.customerId} onClick={() => setSelected(c.customerId)} style={{
+        padding: "12px 14px", borderBottom: `1px solid ${C.border}`, cursor: "pointer",
+        background: selected === c.customerId ? C.vermillionLight : c.aiPaused ? "#FFFBF0" : "transparent",
+        borderLeft: c.aiPaused ? "3px solid #F5A623" : c.hasAlert ? "3px solid #F5A623" : "none",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 500, color: C.deepInk }}>{c.name}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {c.aiPaused && <span style={{ fontSize: 8, padding: "2px 6px", borderRadius: 4, background: "#FFF3CD", color: "#856404", fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>AI বন্ধ</span>}
+            <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Sans', sans-serif" }}>{c.lastTime ? new Date(c.lastTime).toLocaleDateString("bn-BD") : ""}</span>
+          </div>
+        </div>
+        <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{c.last?.content}</div>
       </div>
     );
   }
@@ -742,24 +795,14 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
         {loading ? <p style={{ textAlign: "center", color: C.textMuted, fontFamily: "'Tiro Bangla', serif" }}>লোড হচ্ছে...</p> :
           conversations.length === 0 ? <Card><EmptyState icon="💬" title="কোনো মেসেজ নেই" subtitle="নতুন মেসেজ এখানে দেখাবে" /></Card> :
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            {conversations.map(c => (
-              <div key={c.customerId} onClick={() => setSelected(c.customerId)} style={{ padding: 14, background: C.cardBg, borderBottom: `1px solid ${C.border}`, cursor: "pointer", borderLeft: c.hasAlert ? "3px solid #F5A623" : "none" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 14, fontWeight: 500, color: C.deepInk }}>{c.name}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    {c.hasAlert && <span style={{ fontSize: 10, color: "#F57F17" }}>⚠️</span>}
-                    <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Sans', sans-serif" }}>{c.lastTime ? new Date(c.lastTime).toLocaleDateString("bn-BD") : ""}</span>
-                  </div>
-                </div>
-                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 12, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{c.last.content}</div>
-              </div>
-            ))}
+            {conversations.map(c => <ConvoListItem key={c.customerId} c={c} />)}
           </div>
         }
       </div>
     );
   }
 
+  // Desktop: split panel — conversation list always visible
   return (
     <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 0, height: "calc(100vh - 130px)", border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
       <div style={{ background: C.cardBg, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column" }}>
@@ -769,18 +812,7 @@ function MessagesPage({ sellerId }: { sellerId: string }) {
         <div style={{ flex: 1, overflowY: "auto" }}>
           {loading ? <p style={{ padding: 16, color: C.textMuted, fontFamily: "'Tiro Bangla', serif", fontSize: 13 }}>লোড হচ্ছে...</p> :
             conversations.length === 0 ? <EmptyState icon="💬" title="কোনো মেসেজ নেই" subtitle="নতুন মেসেজ এখানে দেখাবে" /> :
-            conversations.map(c => (
-              <div key={c.customerId} onClick={() => setSelected(c.customerId)} style={{ padding: "12px 14px", borderBottom: `1px solid ${C.border}`, cursor: "pointer", background: selected === c.customerId ? C.vermillionLight : c.hasAlert ? "#FFFBF0" : "transparent", borderLeft: c.hasAlert ? "3px solid #F5A623" : "none" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 13, fontWeight: 500, color: C.deepInk }}>{c.name}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    {c.hasAlert && <span style={{ fontSize: 8, padding: "2px 6px", borderRadius: 4, background: "#FFF3CD", color: "#856404", fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>AI বন্ধ</span>}
-                    <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Sans', sans-serif" }}>{c.lastTime ? new Date(c.lastTime).toLocaleDateString("bn-BD") : ""}</span>
-                  </div>
-                </div>
-                <div style={{ fontFamily: "'Tiro Bangla', serif", fontSize: 11, color: C.textMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{c.last.content}</div>
-              </div>
-            ))
+            conversations.map(c => <ConvoListItem key={c.customerId} c={c} />)
           }
         </div>
       </div>
